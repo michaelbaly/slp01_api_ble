@@ -12,6 +12,111 @@
 #ifndef __EXAMPLE_ATFWD_H__
 #define __EXAMPLE_ATFWD_H__
 
+#ifdef ATEL_MDM_BLE_UART
+#define ADC_CMD_LEN 5
+#define VER_CMD_LEN 5
+#define PIN_CMD_LEN 5
+#define TST_CMD_LEN 5
+#define FRAME_HEAD '$'
+enum SENDING_STATUS{
+	IDLE,
+	SENDING,
+	DONE,
+	ERROR,
+};
+#define QUEUE_BUF_SIZE 30
+typedef struct 
+{
+    char* BUF[30];
+    int front;
+    int rear;
+	int bufLen;
+}API_QUEUE;
+
+enum API_ERROR
+{
+	RET_OK,
+	RET_TOUT,
+};
+struct ADC_ST
+{
+	SHORT	mAdc;  		/* a */
+	SHORT	bAdc;
+	SHORT	eAdc;
+};
+struct VER_ST
+{
+	UCHAR major;
+	UCHAR minor;
+	UCHAR revise;
+	UCHAR build;
+};
+struct INT_STATUS_ST
+{
+	USHORT intStatus;
+};
+struct WD_STATUS_ST
+{
+	UCHAR  wdPin;
+	USHORT wdExpire;
+};
+struct RTC_STATUS_ST
+{
+	UINT time;
+};
+struct DEV_ID_ST
+{
+	UCHAR id[3];
+};
+
+struct PIN_CFG_ST
+{
+	UCHAR idx;
+	UCHAR cfg;
+};
+
+typedef enum MSG_ID
+{
+	MSG_ADC=1,
+	MSG_VER,
+	MSG_GET_PIN_CFG,
+	MSG_TST,
+	MSG_GET_INT_STATUS,
+	MSG_GET_WD_STATUS,
+	MSG_GET_RTC_STATUS,
+	MSG_GET_DEV_ID,
+	MSG_MAX,
+}MSG_ID_CMD;
+
+typedef struct ADC_ST ADC_ST;
+typedef struct VER_ST VER_ST;
+typedef struct PIN_CFG_ST PIN_CFG_ST;
+typedef struct INT_STATUS_ST INT_STATUS_ST;
+typedef struct WD_STATUS_ST WD_STATUS_ST;
+typedef struct RTC_STATUS_ST RTC_STATUS_ST;
+typedef struct DEV_ID_ST DEV_ID_ST;
+struct BLE_ST
+{
+	ADC_ST 			adc;
+	VER_ST 			ver;
+	PIN_CFG_ST 		pinCfg;	
+	INT_STATUS_ST 	intStatus;
+	WD_STATUS_ST 	wdStatus;
+	RTC_STATUS_ST	rtcStatus;
+	DEV_ID_ST		devId;
+};
+typedef struct BLE_ST BLE_ST;
+
+/* API */
+void getAdc(void); 
+void getVer(void);
+void queryPincfg(void);
+void queryIntStatus(void);
+void kickTheWatchDog(void);
+void queryRtcSleepTime(void);
+void queryDevId(void);
+#endif
+
 #if defined(__EXAMPLE_ATFWD__)
 #define HIGH  1
 #define LOW   0
@@ -50,14 +155,23 @@ typedef struct{
 
 
 #define QT_Q_MAX_INFO_NUM		16
+typedef enum{
+	API_RET_OK_E,
+	API_RET_TOUT_E,	
+}API_RETURN_VAL;
 
 typedef struct TASK_COMM_S{
 	int msg_id;
 	int dat;
 	CHAR name[16];
+#ifdef ATEL_MDM_BLE_UART
+	BLE_ST ble_st;
+	API_RETURN_VAL err;
+#else
 	CHAR buffer[32];
+#endif
+	
 }TASK_MSG;
-
 
 #define QUEC_AT_RESULT_ERROR_V01 0 /**<  Result ERROR. 
                                          This is to be set in case of ERROR or CME ERROR. 
@@ -95,6 +209,7 @@ const ATCMD_GPIO_T atcmd_gpio_table[] = {
 };
 
 #define ATCMDS_SIZE  sizeof(atcmd_gpio_table)/sizeof(ATCMD_GPIO_T)
+
 
 #endif /*__EXAMPLE_ATFWD__*/
 

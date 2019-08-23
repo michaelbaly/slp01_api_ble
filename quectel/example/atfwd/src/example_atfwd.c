@@ -10,6 +10,9 @@
 *  ---------------------------------------------------------------------------
 *******************************************************************************/
 #if defined(__EXAMPLE_ATFWD__)
+#define ATEL_MDM_BLE_UART
+
+
 /*===========================================================================
 						   Header file
 ===========================================================================*/
@@ -31,6 +34,7 @@
 #include "quectel_uart_apis.h"
 #include "example_atfwd.h"
 
+
 /**************************************************************************
 *								  GLOBAL
 ***************************************************************************/
@@ -39,15 +43,32 @@ TX_BYTE_POOL *byte_pool_uart3;
 
 TX_BYTE_POOL *byte_pool_at;
 
+static TX_QUEUE *tx_queue_handle = NULL;
+
 #define UART_BYTE_POOL_SIZE		10*8*1024
 UCHAR free_memory_uart[UART_BYTE_POOL_SIZE];
 UCHAR free_memory_at[UART_BYTE_POOL_SIZE];
+/**************************************************************************
+*                                 FUNCTION
+***************************************************************************/
+/*
+@func
+  qt_uart_dbg
+@brief
+  Output the debug log. 
+*/
+void atel_dbg_print(const char* fmt, ...)
+{
+	char log_buf[256] = {0};
 
+	va_list ap;
+	va_start(ap, fmt);
+	vsnprintf(log_buf, sizeof(log_buf), fmt, ap);
+	va_end( ap );
 
-/* uart rx tx buffer */
-static char *rx3_buff = NULL;
-static char *tx3_buff = NULL;
-
+	qapi_atfwd_send_urc_resp("ATEL", log_buf);
+	qapi_Timer_Sleep(50, QAPI_TIMER_UNIT_MSEC, true);
+}
 /* uart config para*/
 static QT_UART_CONF_PARA uart3_conf =
 {
@@ -59,6 +80,10 @@ static QT_UART_CONF_PARA uart3_conf =
 	0,
 	115200
 };
+/* uart rx tx buffer */
+static char *rx3_buff = NULL;
+static char *tx3_buff = NULL;
+
 
 /* uart rx tx buffer */
 static char *rx2_buff = NULL;
@@ -76,11 +101,53 @@ static QT_UART_CONF_PARA uart2_conf =
 	115200
 };
 
-static TX_QUEUE tx_queue_handle;
-static TASK_MSG task_comm[QT_Q_MAX_INFO_NUM];
+#ifdef ATEL_MDM_BLE_UART
+static qapi_TIMER_define_attr_t atel_timer_def_attr;
+static qapi_TIMER_set_attr_t atel_timer_set_attr;
+static qapi_TIMER_handle_t atel_timer_handle;
+static int API_TOUT_CNT_MAX = 2;
+static int API_TOUT_RETRY_CNT_MAX = 3;
+
+void atel_timer_init(void);
+
+static void initQueue(void);
+unsigned char isemptyQueue(void);
+unsigned char is_fullQueue(void);
+static void In_Queue(char *buf, int len);
+static void out_Queue(void );
+void api_switch(MSG_ID_CMD cmd);
+void qt_uart3_dbg(qapi_UART_Handle_t uart_hdlr, const char* fmt, ...);
+static MSG_ID_CMD send_cmd={0};
+
+static ADC_ST g_adc={0};
+static VER_ST 			g_ver={0};
+static PIN_CFG_ST 		g_pin_cfg={0};
+static INT_STATUS_ST 	g_int_status={0};
+static WD_STATUS_ST 	g_wd_status={0};
+static RTC_STATUS_ST 	g_rtc_status={0};
+static DEV_ID_ST		g_dev_id={0};
+
+
+static char adc_cmd[ADC_CMD_LEN+1]={0x24 ,0x01 ,0x41 ,0x01 ,0x0D, 0x00};
+static char ver_cmd[VER_CMD_LEN+1]={0x24 ,0x01 ,0x56 ,0x01 ,0x0D, 0x00};
+static char pin_cmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x43 ,0x01 ,0x0D ,0x00};
+static char int_cmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x49 ,0x01 ,0x0D ,0x00};
+static char wd_cmd [PIN_CMD_LEN+1]={0x24 ,0x01 ,0x4B ,0x01 ,0x0D ,0x00};
+static char rtc_cmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x52 ,0x01 ,0x0D ,0x00};
+static char qId_cmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x54 ,0x01 ,0x0D ,0x00};
+
+static char tst_cmd[TST_CMD_LEN+1]={0x24 ,0x01 ,0x30 ,0x01 ,0x0D, 0x00};
+
+static CHAR *p_atcmd_name=NULL;
+static BLE_ST g_ble_data={0};
+static CHAR ble_start[]={0x42 ,0x4c ,0x45 ,0x20 ,0x73 ,0x74 ,0x61 ,0x72 ,0x74};
+static CHAR da[]={0x0d, 0x0a};
+void *task_comm = NULL;
+
+//static TASK_MSG task_comm[QT_Q_MAX_INFO_NUM];
 
 static int qexample_val = 0;
-char at_cmd_rsp[2048] = {0};
+char at_cmd_rsp[1024] = {0};
 GPIO_MAP_TBL gpio_map_tbl[PIN_E_GPIO_MAX] = {
 /* PIN NUM,     PIN NAME,    GPIO ID  GPIO FUNC */
 	{  4, 		"GPIO01",  		23, 	 0},
@@ -106,16 +173,252 @@ qapi_GPIO_ID_t gpio_id_tbl[PIN_E_GPIO_MAX];
 /* gpio tlmm config table */
 qapi_TLMM_Config_t tlmm_config[PIN_E_GPIO_MAX];
 
-/**************************************************************************
-*                                 FUNCTION
-***************************************************************************/
-/*
-@func
-  qt_uart_dbg
-@brief
-  Output the debug log. 
-*/
-void atel_dbg_print(const char* fmt, ...)
+void getAdc(void)
+{
+	api_switch(MSG_ADC);
+} 
+void getVer(void)
+{
+	api_switch(MSG_VER);
+}
+void queryPincfg(void)
+{
+	api_switch(MSG_GET_PIN_CFG);
+}
+void queryIntStatus(void)
+{
+	api_switch(MSG_GET_INT_STATUS);
+}
+void kickTheWatchDog(void)
+{
+	api_switch(MSG_GET_WD_STATUS);
+}
+void queryRtcSleepTime(void)
+{
+	api_switch(MSG_GET_RTC_STATUS);
+}
+void queryDevId(void)
+{
+	api_switch(MSG_GET_DEV_ID);
+}
+void testCmd(void)
+{
+	api_switch(MSG_TST);
+}
+
+
+void api_switch(MSG_ID_CMD cmd)
+{
+	char *cmd_p;
+	qapi_Status_t status=0;
+	
+	switch(cmd)
+	{
+		case MSG_ADC:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call getAdc()...");
+			cmd_p = adc_cmd;
+		}
+		break;
+		case MSG_VER:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call getVer()...");
+			cmd_p = ver_cmd;
+		}
+		break;	
+		case MSG_GET_PIN_CFG:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call queryPincfg()...");
+			cmd_p = ver_cmd;
+
+		}
+		break;	
+		case MSG_GET_INT_STATUS:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call queryIntStatus()...");
+			cmd_p = int_cmd;
+
+		}
+		break;
+		case MSG_GET_WD_STATUS:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call kickTheWatchDog()...");
+			cmd_p = wd_cmd;
+
+		}
+		break;		
+		case MSG_GET_RTC_STATUS:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call queryRtcSleepTime()...");
+			cmd_p = rtc_cmd;
+
+		}
+		break;			
+		case MSG_GET_DEV_ID:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call queryDevId()...");
+			cmd_p = qId_cmd;
+
+		}
+		break;	
+		case MSG_TST:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call testCmd()...");
+			cmd_p = tst_cmd;
+		}
+		break;
+		default:
+		{
+			goto out;
+		}
+		break;
+			
+	}/*end of switch*/
+	if(isemptyQueue()==true)
+	{
+		send_cmd=cmd;
+		qt_uart_dbg(uart2_conf.hdlr, "%s", cmd_p);
+		
+		In_Queue(cmd_p, ADC_CMD_LEN);
+		atel_timer_set_attr.reload = FALSE;
+		status = qapi_Timer_Set(atel_timer_handle, &atel_timer_set_attr);
+		if(status == QAPI_OK)
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch] start timer ok");
+		}
+		else
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch] start timer failed");
+		}
+	}
+	else
+	{
+		qt_uart_dbg(uart3_conf.hdlr,"[api_switch] In_Queue");
+		In_Queue(cmd_p, ADC_CMD_LEN);
+	}
+	return;
+out:
+	qt_uart_dbg(uart3_conf.hdlr,"[api_switch] cmd:%d is invalid", cmd);
+}
+
+
+int frame_check(char *p, int n)
+{
+	int ret=0;
+	if(!memcmp(ble_start, p, sizeof(ble_start)/sizeof(ble_start[0])))
+	{
+		ret=1;
+		goto out;
+	}
+	if(!memcmp(da, p, sizeof(da)/sizeof(da[0])))
+	{
+		ret=2;
+		goto out;
+	}
+	/* '$' LEN CMD data_body 0x0D */
+	
+	if(n<4)
+	{
+		ret=-1;
+		goto out;
+	}
+	if(p[0] != FRAME_HEAD)
+	{
+		ret=-2;
+		goto out;
+	}	
+	if(p[1] != n-(1+1+1+1))
+	{
+		ret=-3;
+		goto out;
+	}	
+out:
+	return ret;
+}
+
+//static volatile enum SENDING_STATUS sending_status;
+
+static API_QUEUE queue_api;
+
+void initQueue(void)
+{
+    queue_api.front = queue_api.rear = 0; //初始化头尾指针 
+}
+
+//判空
+unsigned char isemptyQueue(void)
+{
+    if(queue_api.front == queue_api.rear)
+    {
+        return true;
+    }
+    else
+        return false;
+}
+ 
+//判满
+unsigned char is_fullQueue(void)
+{
+    if((queue_api.rear+1)%QUEUE_BUF_SIZE == queue_api.front)
+    {
+        return true;
+    }else
+        return false;
+}
+
+//入队
+ 
+void In_Queue(char *buf, int len)
+{
+    
+    //IOT_DEBUG("queue_q****\n");
+    //qt_uart_dbg(uart_conf.hdlr, "is_fullQueue:%d,%d,%d", is_fullQueue(queue_q),queue_q->rear,queue_q->front);
+    if(is_fullQueue() != true)        //队列未满
+    {
+        queue_api.BUF[queue_api.rear] = buf;
+		qt_uart_dbg(uart3_conf.hdlr,"[In_Queue]:%p", queue_api.BUF[queue_api.rear]);
+		
+		queue_api.bufLen = len;
+        //qt_uart_dbg(uart_conf.hdlr, "%x", queue_q->BUF[queue_q->rear]);
+        queue_api.rear = (queue_api.rear + 1)%QUEUE_BUF_SIZE ;    //尾指针偏移 
+    }
+}
+ 
+
+//出队 
+ void out_Queue(void )
+ {
+     //atel_dbg_print("isemptyQueue:%d,%d,%d", isemptyQueue(),queue_nmea.rear,queue_nmea.front);
+     if(isemptyQueue() != true)        //队列未空
+     {
+        //value = queue_q->BUF[queue_q->front];
+	    //atel_dbg_print("[raw data dequeue]%s", (char*)queue_api.BUF[queue_api.front]);
+	    qt_uart_dbg(uart3_conf.hdlr,"[out_Queue]:%p", queue_api.BUF[queue_api.front]);
+		
+		
+		//tx_byte_release((char*)queue_api.BUF[queue_api.front]);
+		
+        queue_api.front = (queue_api.front + 1)%QUEUE_BUF_SIZE ;
+     }
+}
+
+#endif  //ATEL_MDM_BLE_UART
+
+
+
+#if 0
+#ifdef ATEL_MDM_BLE_UART
+/* TX QUEUE buffer */
+static void *task_comm = NULL;
+
+#else
+static TASK_MSG task_comm[QT_Q_MAX_INFO_NUM];
+#endif
+
+#endif
+
+#ifdef ATEL_MDM_BLE_UART
+void qt_uart3_dbg(qapi_UART_Handle_t uart_hdlr, const char* fmt, ...)
 {
 	char log_buf[256] = {0};
 
@@ -124,9 +427,21 @@ void atel_dbg_print(const char* fmt, ...)
 	vsnprintf(log_buf, sizeof(log_buf), fmt, ap);
 	va_end( ap );
 
-	qapi_atfwd_send_urc_resp("ATEL", log_buf);
-	qapi_Timer_Sleep(50, QAPI_TIMER_UNIT_MSEC, true);
+    qapi_UART_Transmit(uart_hdlr, log_buf, strlen(log_buf), NULL);
+    //qapi_UART_Transmit(uart_hdlr, "\r", strlen("\r"), NULL);
+    //qapi_Timer_Sleep(50, QAPI_TIMER_UNIT_MSEC, true);
 }
+
+void qt_uart3_hex(const char* ch, int len)
+{
+	int i;
+	for (i=0; i<len; ++i)
+	{
+		qt_uart3_dbg(uart3_conf.hdlr,"%02x ", *(ch+i));
+	}
+	qt_uart_dbg(uart3_conf.hdlr,"\n");
+}
+#endif
 
 /*
 @func
@@ -339,6 +654,161 @@ void gpio_init()
 	gpio_value_control(PIN_E_GPIO_20, HIGH);
 	//gpio_value_control(PIN_E_GPIO_21, TRUE);
 }
+#ifdef ATEL_MDM_BLE_UART
+#define RESP_TO_PC_BUFF_LEN 1024	
+static char respBuff[RESP_TO_PC_BUFF_LEN]={0};
+
+int ble_parse(char *buf)
+{
+	TASK_MSG rxcb;
+	UINT status;
+	
+	//qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] buf[2]:%x", buf[2]);
+	//qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] buf[3]:%x", buf[3]);
+	switch(buf[2])
+	{
+		case 'a':
+		{
+			g_adc.mAdc = buf[3]*10+buf[4];
+			g_adc.bAdc = buf[5]*10+buf[6];
+			g_adc.eAdc = buf[7]*10+buf[8];
+
+			rxcb.msg_id = MSG_ADC;
+#if 0			
+			rxcb.ble_st.adc.mAdc = buf[3]*10+buf[4];
+			rxcb.ble_st.adc.bAdc = buf[5]*10+buf[6];
+			rxcb.ble_st.adc.eAdc = buf[7]*10+buf[8];
+#else
+			rxcb.ble_st.adc.mAdc = buf[3]<<8|buf[4];
+			rxcb.ble_st.adc.bAdc = buf[5]<<8|buf[6];
+			rxcb.ble_st.adc.eAdc = buf[7]<<8|buf[8];
+#endif			
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] mAdc:%d, bAdc:%d, eAdc:%d", g_adc.mAdc, g_adc.bAdc, g_adc.eAdc);
+
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;
+		case 'v':
+		{
+			rxcb.msg_id = MSG_VER;
+			g_ver.major = buf[3];
+			g_ver.minor = buf[4];
+			g_ver.revise= buf[5];
+			g_ver.build = buf[6];
+			rxcb.ble_st.ver.major  = buf[3];
+			rxcb.ble_st.ver.minor  = buf[4];
+			rxcb.ble_st.ver.revise = buf[5];	
+			rxcb.ble_st.ver.build  = buf[6];
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] major:%d, minor:%d, revise:%d, build:%d", g_ver.major, g_ver.minor, g_ver.revise, g_ver.build);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;	
+		case 'c':
+		{
+			rxcb.msg_id = MSG_GET_PIN_CFG;
+			g_pin_cfg.idx = buf[3];
+			g_pin_cfg.cfg = buf[4];
+			rxcb.ble_st.pinCfg.idx = buf[3];
+			rxcb.ble_st.pinCfg.cfg = buf[4];
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] idx:%d, cfg:%d", g_pin_cfg.idx, g_pin_cfg.cfg);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;		
+		case 'i':
+		{
+			rxcb.msg_id = MSG_GET_INT_STATUS;
+			g_int_status.intStatus = buf[3];
+			rxcb.ble_st.intStatus.intStatus = buf[3];
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] intStatus:%d", g_int_status.intStatus);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;	
+		case 'k':
+		{
+			rxcb.msg_id = MSG_GET_INT_STATUS;
+			g_wd_status.wdPin = buf[3];
+			g_wd_status.wdExpire = buf[4]<<8|buf[5];
+			rxcb.ble_st.wdStatus.wdPin= buf[3];
+			rxcb.ble_st.wdStatus.wdExpire= buf[4]<<8|buf[5];
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] wdStatus:%d, wdExpire:%d", g_wd_status.wdPin, g_wd_status.wdExpire);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;	
+		case 'r':
+		{
+			rxcb.msg_id = MSG_GET_RTC_STATUS;
+			g_rtc_status.time= buf[3]<<24|buf[4]<<16|buf[5]<<8|buf[6];
+			rxcb.ble_st.rtcStatus.time = buf[3];
+			
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] rtcStatus:%d", g_rtc_status.time);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;		
+		case 't':
+		{
+			int id;
+			
+			rxcb.msg_id = MSG_GET_DEV_ID;
+			memcpy(g_dev_id.id, &buf[3], 3);
+			memcpy(rxcb.ble_st.devId.id, &buf[3], 3);
+			id=buf[3]<<16|buf[4]<<8|buf[5];
+			
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] dev id:%d", id);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;		
+		case '0':
+		{
+			rxcb.msg_id = MSG_TST;
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] TST cmd");
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;		
+		default:
+		break;
+	}
+}
+#endif
 
 /*
 @func
@@ -346,27 +816,70 @@ void gpio_init()
 @brief
   uart rx callback handler.
 */
-static void uart_rx_cb_at(uint32_t num_bytes, void *cb_data)
+static void ble_rx_cb(uint32_t num_bytes, void *cb_data)
 {
 	QT_UART_CONF_PARA *uart_conf = (QT_UART_CONF_PARA*)cb_data;
 	TASK_MSG rxcb;
-
-	qapi_Status_t status;
 	
+	qapi_Status_t status;
+#ifdef ATEL_MDM_BLE_UART
+	int fc=0;
+
+	qt_uart_dbg(uart3_conf.hdlr,"[ble_rx_cb] rcv data from BLE...");
+#endif
+
 	//qt_uart_dbg(uart3_conf.hdlr,"[get raw data from BLE tx] uart_conf->rx_buff %d@len,%s@string",uart_conf->rx_len,uart_conf->rx_buff);
 		
-	if(num_bytes == 0)
+	if(num_bytes <= 0)
 	{
 		uart_recv(uart_conf);
 		return;
 	}
-	else if(num_bytes >= uart_conf->rx_len)
+	else if(num_bytes > uart_conf->rx_len)
 	{
 		num_bytes = uart_conf->rx_len;
 	}
+#ifdef ATEL_MDM_BLE_UART
+	else
+	{
+		qt_uart_dbg(uart3_conf.hdlr,"[ble_rx_cb] nbytes:%d,  rx_len:%d", num_bytes, uart_conf->rx_len);
+	}
+	qt_uart3_hex(uart_conf->rx_buff ,num_bytes);
+	fc=frame_check(uart_conf->rx_buff, num_bytes);
+	if(fc<0)
+	{
+		qt_uart_dbg(uart3_conf.hdlr,"[ble_rx_cb] Frame inValid, fc:%d", fc);
+		goto out;
+	}
+	else if(fc==0)
+	{
+		ble_parse(uart_conf->rx_buff);
+		//out_Queue();
+	}
+	else
+	{
+		qt_uart_dbg(uart3_conf.hdlr,"[ble_rx_cb] Special Frame:%s", uart_conf->rx_buff);
+	}
+#endif	
+#if 0	
+	if(!p_atcmd_name)
+	{
+		qt_uart_dbg(uart3_conf.hdlr,"====p_atcmd_name is null====");
+		return;
+	}
+#endif
+	snprintf(respBuff, (num_bytes+5), "+BLE:%s", uart_conf->rx_buff);
+	qt_uart_dbg(uart3_conf.hdlr,"[ble_rx_cb] resptoPc:%s", respBuff);
 	
-	uart_recv(uart_conf);
-	//return;
+#if 0	
+	if(p_atcmd_name)
+	{
+		qapi_atfwd_send_resp(p_atcmd_name, respBuff, QUEC_AT_RESULT_OK_V01);
+	}
+	//sending_status = DONE;
+#endif	
+
+#if 0
 	/* uart2_conf->rx_buff store the tx data from BLE */
 	memcpy(&at_cmd_rsp[strlen(at_cmd_rsp)],uart_conf->rx_buff,num_bytes);
 	
@@ -376,12 +889,23 @@ static void uart_rx_cb_at(uint32_t num_bytes, void *cb_data)
 	if (TX_SUCCESS != status)
 	{
 		qt_uart_dbg(uart3_conf.hdlr, "[uart_rx_cb_at] tx_queue_send failed with status %d", status);
+
 	}
+	
+#endif
+out:
+	qt_uart_dbg(uart3_conf.hdlr, "[uart_rx_cb_at] prepare rcv BLE msg");
+	uart_recv(uart_conf);	
 }
 
-
+static int tx_cnt=0;
 static void uart_tx_cb_at(uint32_t num_bytes, void *cb_data)
 {
+	QT_UART_CONF_PARA *uart_conf = (QT_UART_CONF_PARA*)cb_data;
+	
+	qt_uart_dbg(uart3_conf.hdlr, "[uart_tx_cb_at] send nbytes:%d", num_bytes);
+	//qt_uart_dbg(uart3_conf.hdlr, "[uart_tx_cb_at] send data:%s", uart_conf->tx_buff);
+	
 	return;
 }
 
@@ -399,7 +923,7 @@ void uart_init_at(QT_UART_CONF_PARA *uart_conf)
 	uart_cfg.enable_Loopback 	= 0;
 	uart_cfg.num_Stop_Bits		= QAPI_UART_1_0_STOP_BITS_E;
 	uart_cfg.parity_Mode 		= QAPI_UART_NO_PARITY_E;
-	uart_cfg.rx_CB_ISR			= (qapi_UART_Callback_Fn_t)&uart_rx_cb_at;
+	uart_cfg.rx_CB_ISR			= (qapi_UART_Callback_Fn_t)&ble_rx_cb;
 	uart_cfg.tx_CB_ISR			= (qapi_UART_Callback_Fn_t)&uart_tx_cb_at;
 
 	qapi_UART_Open(&uart_conf->hdlr, uart_conf->port_id, &uart_cfg);
@@ -489,18 +1013,70 @@ boolean gpio_ctrl_cmd(char *tmp_params)
 	return FALSE;
 	
 }
+#ifdef ATEL_MDM_BLE_UART
+void char2hex(char *buf, char *p)
+{
+	int i=0;
+	int j=0;
+	int len=0;
+	len = strlen(buf);
+	for(i=0; i< len; i+=2)
+	{
+		if(buf[i+1]>='0'&&buf[i+1]<='9')
+		{
+			p[j++]=(buf[i]-'0')*16+(buf[i+1]-'0');		
+		}
+		else if(buf[i+1]>='A'&&buf[i+1]<='F')
+		{
+			p[j++]=(buf[i]-'0')*16+(buf[i+1]-'A'+10);
+		}
+		else if(buf[i+1]>='a'&&buf[i+1]<='f')
+		{
+			p[j++]=(buf[i]-'0')*16+(buf[i+1]-'a'+10);
+		}	
+	}
+}
+#if 1
+void put_cmd_to_queue(char *buf, int len)
+{
+	int ret=0;
+	
+	if(is_fullQueue()==true)
+	{
+		qt_uart_dbg(uart3_conf.hdlr, "Queue is full");
+	}
+	else
+	{
+		char *tmp_buff=NULL;
+		ret = tx_byte_allocate(byte_pool_uart, (VOID *)&tmp_buff, strlen(buf)-2, TX_NO_WAIT);
+		if(ret != TX_SUCCESS)
+		{
+			qt_uart_dbg(uart3_conf.hdlr, "tx_byte_allocate [rx_buff] failed, %d",ret);
+			return;
+		}
+		else
+		{
+			qt_uart_dbg(uart3_conf.hdlr, "getAddr:0x%p",tmp_buff);
+		}
 
-void atfwd_cmd_handler_cb(boolean is_reg, char *atcmd_name,
+		memcpy(tmp_buff, buf+2, strlen(buf)-2);
+		qt_uart_dbg(uart3_conf.hdlr, "enQueue:%s", tmp_buff);
+		In_Queue(tmp_buff, len);
+	}
+	return;
+}
+#endif
+#endif
+#define PC_TEST
+void pc_atfwd_cmd_handler_cb(boolean is_reg, char *atcmd_name,
                                  uint8* at_fwd_params, uint8 mask,
                                  uint32 at_handle)
 {
     char buff[32] = {0};
     int  tmp_val = 0;
     qapi_Status_t ret = QAPI_ERROR;
-    
-    qt_uart_dbg(uart3_conf.hdlr,"atfwd_cmd_handler_cb is called, atcmd_name:[%s] mask:[%d]\n", atcmd_name, mask);
-	qt_uart_dbg(uart3_conf.hdlr,"atfwd_cmd_handler_cb is called,  is_reg:[%d]\n", is_reg);
-
+	
+    qt_uart_dbg(uart3_conf.hdlr,"enter [pc_atfwd_cmd_handler_cb]...");
 	if(is_reg)  //Registration Successful,is_reg return 1 
 	{
 		if(mask==QUEC_AT_MASK_EMPTY_V01)
@@ -532,80 +1108,189 @@ void atfwd_cmd_handler_cb(boolean is_reg, char *atcmd_name,
 	        else if ((QUEC_AT_MASK_NA_V01 | QUEC_AT_MASK_EQ_V01 | QUEC_AT_MASK_AR_V01) == mask)//AT+QEXAMPLE=<value>
 	        {
                 char tmp_params[128] = {0};
-
-				
+#ifdef ATEL_MDM_BLE_UART
+				char tmp_p[128] = {'\0'};
+#endif
+				qt_uart3_hex(at_fwd_params, strlen(at_fwd_params));
 				//atel_dbg_print("content of at_fwd_params:%s", at_fwd_params);
 				
                 //ret = qapi_atfwd_send_resp(atcmd_name, "", QUEC_AT_RESULT_OK_V01);//send atcmd  Reponse and then atcmd to uart2
                 qt_termintocomma((char*)at_fwd_params,tmp_params,sizeof(tmp_params));
-				qt_uart_dbg(uart3_conf.hdlr, "tmp_params %s@string", tmp_params);
-
-				
-                if(memcmp(tmp_params,"##",2) == 0)
-                {
-                
-					qt_uart_dbg(uart3_conf.hdlr, "deliver to ble");
-                	//send command to uart2
-                	qt_uart_dbg(uart2_conf.hdlr, "%s", tmp_params);
+				qt_uart_dbg(uart3_conf.hdlr, "strFromPc: %s", tmp_params);
+				char2hex(tmp_params, tmp_p);
+				qt_uart_dbg(uart3_conf.hdlr, "cmd: %c", tmp_p[0]);
+				if(memcmp(tmp_params,"##",2) == 0)
+				{
+#ifdef PC_TEST	
+					switch(tmp_p[0])
+					{
+						case 'A':
+						{
+							getAdc();
+						}
+						break;
+						case 'v':
+						{
+							getVer();
+						}
+						break;
+						case 'C':
+						{
+							queryPincfg();
+						}
+						break;
+						case 'I':
+						{
+							queryIntStatus();
+						}
+						break;
+						case 'K':
+						{
+							kickTheWatchDog();
+						}
+						break;	
+						case 'R':
+						{
+							queryRtcSleepTime();
+						}
+						break;
+						case 'T':
+						{
+							queryDevId();
+						}
+						break;						
+						
+						case '0':
+						{
+							testCmd();
+						}
+						break;						
+						default:
+						break;
+					}
+					qapi_atfwd_send_resp(atcmd_name, "", QUEC_AT_RESULT_OK_V01);
 					
-					qt_uart_dbg(uart3_conf.hdlr, "[send to BLE rx] tmp_params %s@string", tmp_params);
-                }
+					return;
+#endif				
+  
+#ifdef ATEL_MDM_BLE_UART
 				
-                if (!gpio_ctrl_cmd(tmp_params))
-                {
-					qt_uart_dbg(uart3_conf.hdlr, "command does't support: %s", tmp_params);
+					//qt_uart_dbg(uart3_conf.hdlr,"==== send AT to BLE:[%s] ====", tmp_p+2);
+					//qt_uart_dbg(uart3_conf.hdlr,"==== at_fwd_params:%s ====", at_fwd_params);
+
+					qt_uart3_hex(tmp_p+2, strlen(tmp_p)-2);
+#if 0					
+					qt_uart_dbg(uart2_conf.hdlr, "%s", tmp_params+2);
+#else
+					put_cmd_to_queue(tmp_p, strlen(tmp_p)-2);
+#endif
+					p_atcmd_name = atcmd_name;		
+#endif					
+					
                 }
-				else
-                {
-					qt_uart_dbg(uart2_conf.hdlr, "atcmd_name:%s, at_fwd_params:%s", atcmd_name, at_fwd_params);
-                	qapi_atfwd_send_urc_resp(atcmd_name, at_fwd_params);
-                }
+				else{
+	                if (!gpio_ctrl_cmd(tmp_params))
+	                {
+						qt_uart_dbg(uart3_conf.hdlr, "command does't support: %s", tmp_params);
+						qapi_atfwd_send_resp(atcmd_name, "", QUEC_AT_RESULT_ERROR_V01);
+					}
+					else
+	                {
+						qt_uart_dbg(uart2_conf.hdlr, "atcmd_name:%s, at_fwd_params:%s", atcmd_name, at_fwd_params);
+	                	qapi_atfwd_send_urc_resp(atcmd_name, at_fwd_params); //main \ AT port
+	                }
+				}
 	        }
 	    }
 	    else
 	    {
 	        ret = qapi_atfwd_send_resp(atcmd_name, "", QUEC_AT_RESULT_ERROR_V01);
 	    }
-
-    	qt_uart_dbg(uart3_conf.hdlr,"[%s] send resp, ret = %d\n", atcmd_name, ret);
+		//qt_uart_dbg(uart3_conf.hdlr,"[%s] send resp, ret = %d\n", atcmd_name, ret);
 	}	
 }
+#ifdef ATEL_MDM_BLE_UART
+static int timeout_cnt=0;
+static int timer_cnt  = 0;
 
-/*
-@func
-	quectel_task_entry
-@brief
-	Entry function for task. 
-*/
-int quectel_task_entry(void)
+void atel_timer_cb(uint32_t data)
 {
-	qapi_Status_t ret = QAPI_ERROR;
-	TASK_MSG rxdata;
-	char buff[2048] = {0};
-	char atcmd_name[32] = {0};
+#if 1
 
-	/* wait 5sec for device startup */
-	qapi_Timer_Sleep(5, QAPI_TIMER_UNIT_SEC, true);
+	int ret=0;
 	
-	setlocale(LC_ALL, "C");	/// <locale.h>
-
-	txm_module_object_allocate(&byte_pool_at, sizeof(TX_BYTE_POOL));
-	tx_byte_pool_create(byte_pool_at, "byte pool 0", free_memory_at, 10*1024);
-
-	ret = txm_module_object_allocate(&byte_pool_uart, sizeof(TX_BYTE_POOL));
-	if(ret != TX_SUCCESS)
+	TASK_MSG rxdata;
+	timer_cnt++;
+	int status=0;
+	qt_uart_dbg(uart3_conf.hdlr, "[atel_timer_cb] cnt:%d", timer_cnt);
+	if(timer_cnt>API_TOUT_CNT_MAX) //API_TOUT_CNT_MAX s timeout
 	{
-		IOT_DEBUG("txm_module_object_allocate [byte_pool_sensor] failed, %d", ret);
-		return ret;
+		// retry 
+		qt_uart_dbg(uart2_conf.hdlr, queue_api.BUF[queue_api.front]);
+		++timeout_cnt;
+		timer_cnt=0; //after 2s enter here
+		qt_uart_dbg(uart3_conf.hdlr, "[atel_timer_cb] rcv timeout, cnt:%d", timeout_cnt);
+		// if retry reach MAX_CNT, send msg to Main
+		if(timeout_cnt >= API_TOUT_RETRY_CNT_MAX)
+		{
+			timer_cnt=0;
+			timeout_cnt = 0;
+			rxdata.msg_id=send_cmd;
+			rxdata.err = API_RET_TOUT_E;
+			status = tx_queue_send(tx_queue_handle, &rxdata, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+			else
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send ok");
+			}
+		}
+		else
+		{
+			qapi_Timer_Set(atel_timer_handle, &atel_timer_set_attr);
+		}
 	}
-
-	ret = tx_byte_pool_create(byte_pool_uart, "Sensor application pool", free_memory_uart, UART_BYTE_POOL_SIZE);
-	if(ret != TX_SUCCESS)
+	else
 	{
-		IOT_DEBUG("tx_byte_pool_create [byte_pool_sensor] failed, %d", ret);
-		return ret;
-	}
+		qapi_Timer_Set(atel_timer_handle, &atel_timer_set_attr);
+	}		
+	qt_uart_dbg(uart3_conf.hdlr, "[atel_timer_cb] end...");
+#endif
+}
 
+void atel_timer_init(void)
+{
+	qapi_Status_t status = QAPI_OK;
+
+	memset(&atel_timer_def_attr, 0, sizeof(atel_timer_def_attr));
+	atel_timer_def_attr.cb_type	= QAPI_TIMER_FUNC1_CB_TYPE;
+	atel_timer_def_attr.deferrable = false;
+	atel_timer_def_attr.sigs_func_ptr = atel_timer_cb;
+	atel_timer_def_attr.sigs_mask_data = 0x11;
+	status = qapi_Timer_Def(&atel_timer_handle, &atel_timer_def_attr);
+	if(status == QAPI_OK)
+	{
+		qt_uart_dbg(uart3_conf.hdlr,"[atel_timer_init] done", status);
+	}
+	else
+	{
+		qt_uart_dbg(uart3_conf.hdlr,"[atel_timer_init] status[%d]", status);
+	}
+	memset(&atel_timer_set_attr, 0, sizeof(atel_timer_set_attr));
+	atel_timer_set_attr.reload = FALSE;
+	atel_timer_set_attr.time = 1;
+	atel_timer_set_attr.unit = QAPI_TIMER_UNIT_SEC;
+#if 0
+	status = qapi_Timer_Set(atel_timer_handle, &atel_timer_set_attr);
+	qt_uart_dbg(uart3_conf.hdlr,"[atel_timer_init] status[%d]", status);
+#endif
+	return;
+}
+int uart2_init(void)
+{
+	int ret=0;
 	ret = tx_byte_allocate(byte_pool_uart, (VOID *)&rx2_buff, 4*1024, TX_NO_WAIT);
 	if(ret != TX_SUCCESS)
 	{
@@ -628,8 +1313,12 @@ int quectel_task_entry(void)
 	uart_init_at(&uart2_conf);
 	/* start uart receive */
 	uart_recv_at(&uart2_conf);
-
-	/* begin: allocate memory for uart2:communicate with ble */	
+	return ret;
+}
+int uart3_init(void)
+{
+	int ret=0;
+		
 	ret = tx_byte_allocate(byte_pool_uart, (VOID *)&rx3_buff, 4*1024, TX_NO_WAIT);
 	if(ret != TX_SUCCESS)
 	{
@@ -652,44 +1341,218 @@ int quectel_task_entry(void)
 	uart_init(&uart3_conf);
 	/* start uart receive */
 	uart_recv(&uart3_conf);
-
-	/* end */
+	return ret;
+}
+int msg_parse(TASK_MSG rxdata)
+{
+	switch(rxdata.msg_id)
+	{
+		case MSG_ADC:
+		{
+			ADC_ST adc;
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv mAdc:%d, bAdc:%d, eAdc:%d, :err:%d", rxdata.ble_st.adc.mAdc,
+																			 rxdata.ble_st.adc.bAdc,
+																			 rxdata.ble_st.adc.eAdc,
+																			 rxdata.err
+																			);
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+			
+		}
+		break;
+		case MSG_VER:
+		{
+			VER_ST ver;
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv major:%d, minor:%d, revise:%d, build:%d, err:%d", rxdata.ble_st.ver.major,
+																			 
+																			 rxdata.ble_st.ver.minor,
+																			 rxdata.ble_st.ver.revise,
+																			 rxdata.ble_st.ver.build,
+																			 rxdata.err
+																			);
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();					
+		}
+		break;	
+		case MSG_GET_PIN_CFG:
+		{
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv pin idx:%d, cfg:%d, err:%d", rxdata.ble_st.pinCfg.idx, 
+																			  rxdata.ble_st.pinCfg.cfg,
+																			  rxdata.err
+																			 );
+					
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+		}
+		break;
+		case MSG_GET_INT_STATUS:
+		{
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv interrupt status :%d, err:%d", 
+																			  rxdata.ble_st.intStatus.intStatus,
+																			  rxdata.err
+																			 );
+					
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+		}
+		break;		
+		case MSG_GET_WD_STATUS:
+		{
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv wd status wdPin:%d, wdExpire:%d,err:%d", 
+																			  rxdata.ble_st.wdStatus.wdPin,
+																			  rxdata.ble_st.wdStatus.wdExpire,
+																			  rxdata.err
+																			 );
+					
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+		}
+		break;	
+		case MSG_GET_RTC_STATUS:
+		{
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv rtc status time:%d,err:%d", 
+																			  rxdata.ble_st.rtcStatus.time,
+																			  rxdata.err
+																			 );
+					
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+		}
+		break;		
+		case MSG_GET_DEV_ID:
+		{
+			int id;
+			id=rxdata.ble_st.devId.id[0]<<16|rxdata.ble_st.devId.id[1]<<8|rxdata.ble_st.devId.id[2];
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv dev Id:%d, err:%d", 
+																			  id,
+																			  rxdata.err
+																			 );
+					
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+		}
+		break;			
+		case MSG_TST:
+		{
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv test cmd");
+					
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+		}
+		break;
+		default:
+		{
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv unrecognizable cmd:%d", rxdata.msg_id);	
+			goto out;
+		}	
+		break;
+	}
+	return 0;
+out:
+	return -1;
+}
+#endif
+/*
+@func
+	quectel_task_entry
+@brief
+	Entry function for task. 
+*/
+int quectel_task_entry(void)
+{
+	qapi_Status_t ret = QAPI_ERROR;
+	TASK_MSG rxdata;
+	char buff[2048] = {0};
+	char atcmd_name[32] = {0};
+	int cnt=0;
+	/* wait 5sec for device startup */
+	qapi_Timer_Sleep(5, QAPI_TIMER_UNIT_SEC, true);
 	
+	setlocale(LC_ALL, "C");	/// <locale.h>
+
+	txm_module_object_allocate(&byte_pool_at, sizeof(TX_BYTE_POOL));
+	tx_byte_pool_create(byte_pool_at, "byte pool 0", free_memory_at, 10*1024);
+
+	ret = txm_module_object_allocate(&byte_pool_uart, sizeof(TX_BYTE_POOL));
+	if(ret != TX_SUCCESS)
+	{
+		IOT_DEBUG("txm_module_object_allocate [byte_pool_sensor] failed, %d", ret);
+		return ret;
+	}
+
+	ret = tx_byte_pool_create(byte_pool_uart, "Sensor application pool", free_memory_uart, UART_BYTE_POOL_SIZE);
+	if(ret != TX_SUCCESS)
+	{
+		IOT_DEBUG("tx_byte_pool_create [byte_pool_sensor] failed, %d", ret);
+		return ret;
+	}
+
+#ifdef ATEL_MDM_BLE_UART
+	ret = uart3_init();
+	if(ret)
+	{
+		qt_uart_dbg(uart3_conf.hdlr,"uart2 init success");
+	}
+	else
+	{
+		qt_uart_dbg(uart3_conf.hdlr,"uart3 init success");
+	}
+
+	ret = uart2_init();
+	if(ret)
+	{
+		qt_uart_dbg(uart3_conf.hdlr,"uart2 init error :%d", ret);
+	}
+	else
+	{
+		qt_uart_dbg(uart3_conf.hdlr,"uart2 init success");
+	}
+
+	ret = txm_module_object_allocate(&tx_queue_handle, sizeof(TX_QUEUE));
+	if(ret != TX_SUCCESS)
+	{
+		qt_uart_dbg(uart3_conf.hdlr,"[task] txm_module_object_allocate tx_queue_handle failed, %d", ret);
+		return ret;
+	}
+	else
+	{
+		qt_uart_dbg(uart3_conf.hdlr,"[task] txm_module_object_allocate success");
+	}
+#endif
+	/* end */
+	ret = tx_byte_allocate(byte_pool_uart, (void **)&task_comm, QT_Q_MAX_INFO_NUM * sizeof(TASK_MSG), TX_NO_WAIT);
+	if(ret != TX_SUCCESS)
+	{
+		IOT_DEBUG("[task] tx_byte_allocate task_comm failed, %d", ret);
+		qt_uart_dbg(uart3_conf.hdlr,"[task] tx_byte_allocate task_comm failed");
+		return ret;
+	}
 	/* begin: allocate memory for task comma */
 	/* create a new queue : q_task_comm */
-    ret = tx_queue_create(&tx_queue_handle,
-							 "q_task_comm",
+    ret = tx_queue_create(tx_queue_handle,
+							 "q_task_api",
 							 TX_16_ULONG,
 							 task_comm,
 							 QT_Q_MAX_INFO_NUM *sizeof(TASK_MSG)
 							 );
-	
     if (TX_SUCCESS != ret)
     {
     	//qt_uart_dbg(uart1_conf.hdlr, "tx_queue_create failed with status %d", retval);
-    }
-
-	
+		qt_uart_dbg(uart3_conf.hdlr,"tx_queue_create failed with status: 0x%x", ret);
+	}
 	/* end*/
-
-	
 	/* prompt task running */
-	
 	/* begin: GPIO init */
 	gpio_init();
+	/* end */	
+	//qt_uart_dbg(uart3_conf.hdlr,"ATFWD Example entry...\n");
 
-	
-	/* end */
-    
-	qt_uart_dbg(uart3_conf.hdlr,"ATFWD Example entry...\n");
-
-	if (qapi_atfwd_Pass_Pool_Ptr(atfwd_cmd_handler_cb, byte_pool_at) != QAPI_OK)
+	if (qapi_atfwd_Pass_Pool_Ptr(pc_atfwd_cmd_handler_cb, byte_pool_at) != QAPI_OK)
 	{
-		qt_uart_dbg(uart3_conf.hdlr, "Unable to alloc User space memory fail state  %x" ,0);
-	  										
+		qt_uart_dbg(uart3_conf.hdlr, "Unable to alloc User space memory fail state  %x" ,0); 										
 	}
-	
-    ret = qapi_atfwd_reg("+BLE", atfwd_cmd_handler_cb);
+
+    ret = qapi_atfwd_reg("+BLE", pc_atfwd_cmd_handler_cb);
     if(ret != QAPI_OK)
     {
         qt_uart_dbg(uart3_conf.hdlr,"qapi_atfwd_reg  fail\n");
@@ -698,31 +1561,87 @@ int quectel_task_entry(void)
     {
         qt_uart_dbg(uart3_conf.hdlr,"qapi_atfwd_reg ok!\n");
     }
-    while(1)
-    {
-	    /* wait 5sec */
-		ret = tx_queue_receive(&tx_queue_handle, &rxdata, TX_WAIT_FOREVER);
+#ifdef ATEL_MDM_BLE_UART
+	qt_uart_dbg(uart3_conf.hdlr,"init queue\n");
+	initQueue();
+	qt_uart_dbg(uart3_conf.hdlr,"init queue done\n");
+	atel_timer_init();
 
+    while(1)
+    {	 
+		ret = tx_queue_receive(tx_queue_handle, &rxdata, TX_WAIT_FOREVER);
 	    if(TX_SUCCESS != ret)
 	    {
 	    	qt_uart_dbg(uart3_conf.hdlr, "[Main task_create] tx_queue_receive failed with status %d", ret);
 	    }
-		
-	    //Active Report
-	    qt_uart_dbg(uart3_conf.hdlr, "[get respond] at_cmd_rsp %d@len,%s@string",strlen(at_cmd_rsp),at_cmd_rsp);
-	    if(strlen(at_cmd_rsp) > 0)
-	    {
-		    memset(atcmd_name, 0x00,sizeof(atcmd_name));
-		    memcpy(atcmd_name, "+BLE",4);
-		    snprintf(buff, sizeof(buff), "%s", at_cmd_rsp);
-		    ret = qapi_atfwd_send_urc_resp(atcmd_name, buff);
-		    memset(at_cmd_rsp, 0, sizeof(at_cmd_rsp));
-		    //memset(buff, 0, sizeof(buff));
-	    }
+		else
+		{
+			msg_parse(rxdata);
+		}	
+		//qapi_Timer_Sleep(1, QAPI_TIMER_UNIT_SEC, true);
+    	if(!isemptyQueue())
+		{
+			char cmd=0;
+			cmd = queue_api.BUF[queue_api.front][2];
 
-	    qapi_Timer_Sleep(5, QAPI_TIMER_UNIT_SEC, true);
+			qt_uart_dbg(uart3_conf.hdlr, "First cmd in queue : %c", cmd);			
+			if(cmd == 'V')
+			{
+				send_cmd=MSG_VER;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'V' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", ver_cmd);
+			}	
+			else if(cmd == 'A')
+			{
+				send_cmd=MSG_ADC;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'A' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", adc_cmd);
+			}
+			else if(cmd == 'C')
+			{
+				send_cmd=MSG_GET_PIN_CFG;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'C' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", pin_cmd);
+			}
+			else if(cmd == 'K')
+			{
+				send_cmd=MSG_GET_WD_STATUS;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'K' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", wd_cmd);
+			}	
+			else if(cmd == 'R')
+			{
+				send_cmd=MSG_GET_RTC_STATUS;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'R' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", rtc_cmd);
+			}			
+			else if(cmd == 'T')
+			{
+				send_cmd=MSG_GET_DEV_ID;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'T' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", qId_cmd);
+			}	
+			else if(cmd == 'I')
+			{
+				send_cmd=MSG_GET_INT_STATUS;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'I' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", int_cmd);
+			}			
+			else if(cmd == '0')
+			{
+				send_cmd=MSG_TST;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd '0' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", tst_cmd);
+			}
+			
+			qapi_Timer_Set(atel_timer_handle, &atel_timer_set_attr);
+		}
+    	else
+		{
+			qt_uart_dbg(uart3_conf.hdlr, "[Main] Queue is Empty,prepare wait next api");
+		}	
     }
-
+#endif	
     return 0;
 }
 

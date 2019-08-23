@@ -183,7 +183,7 @@ int quectel_task_entry(void)
 		return ret;
 	}
 
-	/* create a new task : sub1 */
+	/* create a new task : sub1 床架一个线程 */
 	ret = tx_thread_create(qt_sub1_thread_handle,
 						   "Quectel Main Task Thread",
 						   quectel_sub1_task_entry,
