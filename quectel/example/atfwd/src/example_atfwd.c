@@ -198,6 +198,12 @@ qapi_GPIO_ID_t gpio_id_tbl[PIN_E_GPIO_MAX];
 
 /* gpio tlmm config table */
 qapi_TLMM_Config_t tlmm_config[PIN_E_GPIO_MAX];
+void mdmSendToBle(char *buf, int len)
+{
+    qapi_UART_Transmit(uart2_conf.hdlr, buf, len, NULL);
+    qapi_UART_Transmit(uart2_conf.hdlr, "\r", strlen("\r"), NULL);
+    qapi_Timer_Sleep(50, QAPI_TIMER_UNIT_MSEC, true);
+}
 
 void getAdc(void)
 {
@@ -551,8 +557,7 @@ void api_switch(MSG_ID_CMD cmd, void *var)
 	if(isemptyQueue()==true)
 	{
 		send_cmd=cmd;
-		atel_uart_dbg(uart2_conf.hdlr, cmd_len, cmd_p);
-		
+		mdmSendToBle(cmd_p, cmd_len);
 		In_Queue(cmd_p);
 		atel_timer_set_attr.reload = FALSE;
 		status = qapi_Timer_Set(atel_timer_handle, &atel_timer_set_attr);

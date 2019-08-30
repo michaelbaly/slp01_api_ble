@@ -162,19 +162,3 @@ void qt_uart_dbg(qapi_UART_Handle_t uart_hdlr, const char* fmt, ...)
     qapi_UART_Transmit(uart_hdlr, "\r", strlen("\r"), NULL);
     qapi_Timer_Sleep(50, QAPI_TIMER_UNIT_MSEC, true);
 }
-void atel_uart_dbg(qapi_UART_Handle_t uart_hdlr, int len, char *buf)
-{
-#if 0
-
-	char log_buf[256] = {0};
-
-	va_list ap;
-	va_start(ap, fmt);
-	vsnprintf(log_buf, sizeof(log_buf), fmt, ap);
-	va_end( ap );
-#endif
-    qapi_UART_Transmit(uart_hdlr, buf, len, NULL);
-    qapi_UART_Transmit(uart_hdlr, "\r", strlen("\r"), NULL);
-    qapi_Timer_Sleep(50, QAPI_TIMER_UNIT_MSEC, true);
-}
-
