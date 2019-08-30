@@ -69,6 +69,8 @@ void atel_dbg_print(const char* fmt, ...)
 	qapi_atfwd_send_urc_resp("ATEL", log_buf);
 	qapi_Timer_Sleep(50, QAPI_TIMER_UNIT_MSEC, true);
 }
+void qt_uart3_hex(const char* ch, int len);
+
 /* uart config para*/
 static QT_UART_CONF_PARA uart3_conf =
 {
@@ -108,33 +110,57 @@ static qapi_TIMER_handle_t atel_timer_handle;
 static int API_TOUT_CNT_MAX = 2;
 static int API_TOUT_RETRY_CNT_MAX = 3;
 
-void atel_timer_init(void);
+static void atel_timer_init(void);
 
 static void initQueue(void);
-unsigned char isemptyQueue(void);
-unsigned char is_fullQueue(void);
-static void In_Queue(char *buf, int len);
+static unsigned char isemptyQueue(void);
+static unsigned char is_fullQueue(void);
+static void In_Queue(char *buf);
 static void out_Queue(void );
-void api_switch(MSG_ID_CMD cmd);
-void qt_uart3_dbg(qapi_UART_Handle_t uart_hdlr, const char* fmt, ...);
+static void api_switch(MSG_ID_CMD cmd, void *var);
+static void qt_uart3_dbg(qapi_UART_Handle_t uart_hdlr, const char* fmt, ...);
 static MSG_ID_CMD send_cmd={0};
 
-static ADC_ST g_adc={0};
+static ADC_ST 			g_adc={0};
 static VER_ST 			g_ver={0};
 static PIN_CFG_ST 		g_pin_cfg={0};
 static INT_STATUS_ST 	g_int_status={0};
 static WD_STATUS_ST 	g_wd_status={0};
 static RTC_STATUS_ST 	g_rtc_status={0};
 static DEV_ID_ST		g_dev_id={0};
+static NEW_TIME_FMT_ST	g_new_time_fmt ={0};
+static RST_CNT_ST		g_rst_cnt ={0};
+static WD_DEFAULT_TIMER	g_wd_default_timer ={0};
+static GPIO_STATUS_T	g_gpio_status ={0};
+static GPIO_CFG_T		g_gpio_cfg ={0};
+static E2ROM_RW_T		g_e2rom_rw ={0};
+static GPIO_RD_SET_T    g_gpioRdSet = {0};
+static HARD_REST_T 		g_hard_rest = {0};
+static SLEEP_TIMER_T 	g_sleep_timer = {0};
+static PWR_CTRL_T 		g_pwr_ctrl = {0};
 
 
 static char adc_cmd[ADC_CMD_LEN+1]={0x24 ,0x01 ,0x41 ,0x01 ,0x0D, 0x00};
 static char ver_cmd[VER_CMD_LEN+1]={0x24 ,0x01 ,0x56 ,0x01 ,0x0D, 0x00};
 static char pin_cmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x43 ,0x01 ,0x0D ,0x00};
 static char int_cmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x49 ,0x01 ,0x0D ,0x00};
-static char wd_cmd [PIN_CMD_LEN+1]={0x24 ,0x01 ,0x4B ,0x01 ,0x0D ,0x00};
+static char wd_cmd [PIN_CMD_LEN+1+1+1+1]={0x24 ,0x03 ,0x4B ,0x00 ,0x00 ,0x00, 0x0D, 0x00};
 static char rtc_cmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x52 ,0x01 ,0x0D ,0x00};
 static char qId_cmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x54 ,0x01 ,0x0D ,0x00};
+static char newTimeCmd[NEW_SLEEP_TIME_FMT_CMD_LEN+1]={0x24 ,0x06 ,0x5A ,0x5A ,0xFF ,0xFF,0xFF ,0xFF,0xFF ,0x0D ,0x00};
+static char rst_cnt[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x59, 0x01 ,0x0D ,0x00};
+static char wdDefaultTimerCmd[WD_DEF_TIMER_CMD_LEN+1]={0x24 ,0x02 ,0x42, 0x00, 0x00, 0x0D ,0x00};
+static char queryGpioCmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x51, 0x01 ,0x0D ,0x00};
+static char gpioCfgcmd[GPIO_CFG_CMD_LEN+1]={0x24 ,0x04 ,0x45, 0x00, 0x00,0x00,0x00,0x0D ,0x00};
+static char readE2romCmd[PIN_CMD_LEN+PIN_CMD_LEN+1] = {0x24 ,0x06 ,0x46, 0x52, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x0D,0x00};
+static char writeE2romCmd[PIN_CMD_LEN+PIN_CMD_LEN+1] = {0x24 ,0x06 ,0x46, 0x57, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x0D,0x00};
+static char readGpioCmd[RD_GPIO_CMD_LEN+1]={0x24 ,0x03 ,0x47, 0x00, 0x00, 0x00 ,0x0D ,0x00};
+static char setGpioCmd[PIN_CMD_LEN+1]={0x24 ,0x03 ,0x47, 0x00, 0x00, 0x00 ,0x0D ,0x00};
+static char hardRestCmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x48, 0xFF, 0x0D ,0x00};
+static char setAdcLvlCmd[PIN_CMD_LEN+1]={0x24 ,0x02 ,0x4C, 0xFF, 0xFF, 0x0D ,0x00};
+static char sleepTimerCmd[PIN_CMD_LEN+1]={0x24 ,0x03 ,0x4E, 0xFF, 0xFF, 0xFF, 0x0D ,0x00};
+static char pwrCtrlCmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x50, 0x00, 0x0D ,0x00};
+
 
 static char tst_cmd[TST_CMD_LEN+1]={0x24 ,0x01 ,0x30 ,0x01 ,0x0D, 0x00};
 
@@ -175,96 +201,344 @@ qapi_TLMM_Config_t tlmm_config[PIN_E_GPIO_MAX];
 
 void getAdc(void)
 {
-	api_switch(MSG_ADC);
+	api_switch(MSG_ADC, 0);
 } 
 void getVer(void)
 {
-	api_switch(MSG_VER);
+	api_switch(MSG_VER, 0);
 }
-void queryPincfg(void)
+void queryPincfg(UCHAR pinIdx)
 {
-	api_switch(MSG_GET_PIN_CFG);
+	api_switch(MSG_GET_PIN_CFG, &pinIdx);
 }
 void queryIntStatus(void)
 {
-	api_switch(MSG_GET_INT_STATUS);
+	api_switch(MSG_GET_INT_STATUS, 0);
 }
-void kickTheWatchDog(void)
+void kickTheWatchDog(uint32 timer)
 {
-	api_switch(MSG_GET_WD_STATUS);
+	api_switch(MSG_GET_WD_STATUS, &timer);
 }
 void queryRtcSleepTime(void)
 {
-	api_switch(MSG_GET_RTC_STATUS);
+	api_switch(MSG_GET_RTC_STATUS, 0);
 }
 void queryDevId(void)
 {
-	api_switch(MSG_GET_DEV_ID);
+	api_switch(MSG_GET_DEV_ID, 0);
 }
+void newSleepTimeFormat(UCHAR mode, int val)
+{
+	newSleepTimeFormat_t var={0};
+	var.mode = mode;
+	var.val  = val;
+	api_switch(MSG_NEW_SLP_TIME_FMT, &var);
+}
+void resetCounter(void)
+{
+	api_switch(MSG_RST_CNT, 0);
+}
+static USHORT g_wdDftTime=0;
+void wdDefaultTimer(USHORT time)
+{
+	g_wdDftTime = time;
+	api_switch(MSG_WD_DF_TIMER, 0);
+}
+void queryGpio(UCHAR mode, UCHAR idx)
+{
+	queryGpio_t var={0};
+	var.mode = mode;
+	var.idx	 = idx;
+	api_switch(MSG_QUERY_GPIO, &var);
+}
+/* io_status,  1:input; 0:output */
+void gpioCfg(UCHAR pin, CHAR io_status, USHORT timer)
+{
+	GPIO_CFG_T var = {0};
+	var.pin 		= pin;
+	var.status 		= io_status;
+	var.timer		= timer;		
+	api_switch(MSG_GPIO_CFG, &var);
+}
+void readE2rom(void)
+{
+	api_switch(MSG_RD_E2ROM, 0);
+}
+void writeE2rom(void)
+{
+	api_switch(MSG_WR_E2ROM, 0);
+}
+/*use gpio 7/8 to test, can set directly, readGpio is useless*/
+void readGpio(UCHAR gpio)
+{
+	api_switch(MSG_RD_GPIO, &gpio);
+}
+void setGpio(UCHAR gpio, bool val)
+{
+	setGpio_t var={0};
+	var.gpio = gpio;
+	var.val  = val;
+	api_switch(MSG_SET_GPIO, &var);
+}
+void hardRest(UCHAR delay)
+{
+	api_switch(MSG_HARD_REST, &delay);
+}
+void setAdcLevel(UCHAR channel, UCHAR upLow, UCHAR threshold)
+{
+	setAdcLevel_t var = {0};
+	var.channel 	= channel;
+	var.upLow   	= upLow;
+	var.threshold 	= threshold;
+	api_switch(MSG_SET_ADC_LVL, &var);
+}
+void sleepTimer(uint32 time)
+{
+	api_switch(MSG_SLEEP_TIMER, &time);
+}
+void powerControl(void)
+{
+	api_switch(MSG_PWR_CTRL, 0);
+}
+
 void testCmd(void)
 {
-	api_switch(MSG_TST);
+	api_switch(MSG_TST, 0);
 }
 
 
-void api_switch(MSG_ID_CMD cmd)
+void api_switch(MSG_ID_CMD cmd, void *var)
 {
 	char *cmd_p;
 	qapi_Status_t status=0;
-	
+	int cmd_len=0;
 	switch(cmd)
 	{
 		case MSG_ADC:
 		{
 			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call getAdc()...");
 			cmd_p = adc_cmd;
+			cmd_len = sizeof(adc_cmd)/sizeof(adc_cmd[0]);
 		}
 		break;
 		case MSG_VER:
 		{
 			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call getVer()...");
 			cmd_p = ver_cmd;
+			cmd_len = sizeof(ver_cmd)/sizeof(ver_cmd[0]);
 		}
 		break;	
 		case MSG_GET_PIN_CFG:
 		{
 			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call queryPincfg()...");
-			cmd_p = ver_cmd;
-
+			UCHAR *pinIdx = (UCHAR *)var;
+			pin_cmd [3] = *pinIdx;
+			cmd_p = pin_cmd;
+			cmd_len = sizeof(pin_cmd)/sizeof(pin_cmd[0]);
 		}
 		break;	
 		case MSG_GET_INT_STATUS:
 		{
 			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call queryIntStatus()...");
 			cmd_p = int_cmd;
-
+			cmd_len = sizeof(int_cmd)/sizeof(int_cmd[0]);
 		}
 		break;
 		case MSG_GET_WD_STATUS:
 		{
 			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call kickTheWatchDog()...");
+			uint32* timer = (uint32 *)var;
+			wd_cmd[3] = (*timer>>0 )&0xFF;
+			wd_cmd[4] = (*timer>>8 )&0xFF;
+			wd_cmd[5] = (*timer>>16)&0xFF;
 			cmd_p = wd_cmd;
-
+			cmd_len = sizeof(wd_cmd)/sizeof(wd_cmd[0]);
 		}
 		break;		
 		case MSG_GET_RTC_STATUS:
 		{
 			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call queryRtcSleepTime()...");
 			cmd_p = rtc_cmd;
-
+			cmd_len = sizeof(rtc_cmd)/sizeof(rtc_cmd[0]);
 		}
 		break;			
 		case MSG_GET_DEV_ID:
 		{
 			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call queryDevId()...");
 			cmd_p = qId_cmd;
-
+			cmd_len = sizeof(qId_cmd)/sizeof(qId_cmd[0]);
 		}
 		break;	
+		case MSG_NEW_SLP_TIME_FMT:
+		{
+			newSleepTimeFormat_t *nstf = var;
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call newSleepTimeFmt(), mode:%d, val:%d", nstf->mode, nstf->val);
+			newTimeCmd[4] = nstf->mode;
+			newTimeCmd[5] = (nstf->val>>0 )&0xFF;
+			newTimeCmd[6] = (nstf->val>>8 )&0xFF;
+			newTimeCmd[7] = (nstf->val>>16)&0xFF;
+			cmd_p = newTimeCmd;
+			qt_uart3_hex(newTimeCmd, NEW_SLEEP_TIME_FMT_CMD_LEN);
+			cmd_len = sizeof(newTimeCmd)/sizeof(newTimeCmd[0]);
+		}
+		break;	
+		case MSG_RST_CNT:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call restCounter()...");
+			cmd_p = rst_cnt;
+			cmd_len = sizeof(rst_cnt)/sizeof(rst_cnt[0]);
+		}
+		break;		
+		case MSG_WD_DF_TIMER:
+		{			
+			wdDefaultTimerCmd[3] = g_wdDftTime&0xFF;
+			wdDefaultTimerCmd[4] = (g_wdDftTime>>8)&0xFF;
+		
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call wdDefaultTimer()...");
+			cmd_p = wdDefaultTimerCmd;
+			cmd_len = sizeof(wdDefaultTimerCmd)/sizeof(wdDefaultTimerCmd[0]);
+		}
+		break;		
+		case MSG_QUERY_GPIO:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call queryGpio()");
+			queryGpio_t *qg = var;
+			if(qg->mode == 0x01)
+			{
+				//24 01 51 01 0D
+				queryGpioCmd[4] = 0x0D;
+				cmd_len = 5;
+			}	
+			else if(qg->mode == 0x02)
+			{
+				//24 02 51 02 00 0D
+				queryGpioCmd[1] = 0x02;
+				queryGpioCmd[4] = 0x00;
+				queryGpioCmd[5] = 0x0D;
+				cmd_len = 6;
+			}	
+			else
+			{
+				qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call queryGpio(), mode:%d, invalid", qg->mode);	
+				goto out;
+			}
+			
+			queryGpioCmd[3] = qg->mode;
+			cmd_p = queryGpioCmd;
+			//cmd_len = sizeof(queryGpioCmd)/sizeof(queryGpioCmd[0]);
+		}
+		break;		
+		case MSG_GPIO_CFG:
+		{
+			// {0x24 ,0x01 ,0x51, 0x01 ,0x0D ,0x00};
+			//	24 04 45 00 60 00 00 0D	
+			GPIO_CFG_T *gc = (GPIO_CFG_T*)var;			
+			gpioCfgcmd[3] = gc->pin;
+			gpioCfgcmd[4] = gc->status; 	;
+			gpioCfgcmd[5] = gc->timer>>8;
+			gpioCfgcmd[6] = gc->timer&0xff;
+			
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call gpioCfg()...");
+			qt_uart3_hex(gpioCfgcmd, GPIO_CFG_CMD_LEN);
+			cmd_p = gpioCfgcmd;
+			cmd_len = sizeof(gpioCfgcmd)/sizeof(gpioCfgcmd[0]);
+		}
+		break;	
+		case MSG_RD_E2ROM:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call readE2rom()...");
+			cmd_p = readE2romCmd;
+			cmd_len = sizeof(readE2romCmd)/sizeof(readE2romCmd[0]);
+		}
+		break;
+		case MSG_WR_E2ROM:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call readE2rom()...");
+			cmd_p = writeE2romCmd;
+			cmd_len = sizeof(writeE2romCmd)/sizeof(writeE2romCmd[0]);
+		}
+		break;	
+		case MSG_RD_GPIO:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call readGpio()...");
+			UCHAR *r_g = (UCHAR *)var;
+			readGpioCmd[3] = *r_g;
+			readGpioCmd[4] = 1;
+			qt_uart3_hex(readGpioCmd, RD_GPIO_CMD_LEN);
+			cmd_p = readGpioCmd;
+			cmd_len = sizeof(readGpioCmd)/sizeof(readGpioCmd[0]);
+		}
+		break;
+		case MSG_SET_GPIO:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call setGpio()...");
+			setGpio_t *s_g = (setGpio_t*)var;
+			setGpioCmd[3] = s_g->gpio;
+			setGpioCmd[4] = 0;
+			setGpioCmd[5] = s_g->val;
+			qt_uart3_hex(setGpioCmd, RD_GPIO_CMD_LEN);
+			cmd_p = setGpioCmd;
+			cmd_len = sizeof(setGpioCmd)/sizeof(setGpioCmd[0]);
+		}
+		break;
+		case MSG_HARD_REST:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call hardRest()...");
+			UCHAR *delay = (UCHAR *)var;
+			hardRestCmd[3] = *delay;
+			cmd_p = hardRestCmd;
+			qt_uart3_hex(setGpioCmd, RD_GPIO_CMD_LEN);
+			cmd_len = sizeof(hardRestCmd)/sizeof(hardRestCmd[0]);
+		}
+		break;
+		case MSG_SET_ADC_LVL:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call setAdcLevel()...");
+			setAdcLevel_t *adc = (setAdcLevel_t *)var;
+			setAdcLvlCmd[3] = adc->threshold;
+			if(adc->channel == 0x01)/* 12v */
+			{
+				setAdcLvlCmd[4] |= (1<<15); 
+			}
+			else if(adc->channel == 0x02) /*battery*/
+			{
+				setAdcLvlCmd[4] &= ~(1<<15); 
+			}
+			if(adc->upLow == 0x01)
+			{
+				setAdcLvlCmd[4] |= (1<<14);
+			}
+			else if(adc->upLow == 0x00)
+			{
+				setAdcLvlCmd[4] &= ~(1<<14);
+			}	
+			cmd_p = setAdcLvlCmd;
+			cmd_len = sizeof(setAdcLvlCmd)/sizeof(setAdcLvlCmd[0]);
+		}
+		break;	
+		case MSG_SLEEP_TIMER:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call sleepTimer()...");
+			uint32 *slpTime = (uint32 *)var;
+			sleepTimerCmd[3] = (*slpTime>>0 )&0xFF;
+			sleepTimerCmd[4] = (*slpTime>>8 )&0xFF;
+			sleepTimerCmd[5] = (*slpTime>>16)&0xFF;
+			cmd_p = sleepTimerCmd;
+			cmd_len = sizeof(sleepTimerCmd)/sizeof(sleepTimerCmd[0]);
+		}
+		break;	
+		case MSG_PWR_CTRL:
+		{
+			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call powerControl()...");
+			cmd_p = pwrCtrlCmd;
+			cmd_len = sizeof(pwrCtrlCmd)/sizeof(pwrCtrlCmd[0]);
+		}
+		break;
 		case MSG_TST:
 		{
 			qt_uart_dbg(uart3_conf.hdlr,"[api_switch]call testCmd()...");
 			cmd_p = tst_cmd;
+			cmd_len = sizeof(tst_cmd)/sizeof(tst_cmd[0]);
 		}
 		break;
 		default:
@@ -277,9 +551,9 @@ void api_switch(MSG_ID_CMD cmd)
 	if(isemptyQueue()==true)
 	{
 		send_cmd=cmd;
-		qt_uart_dbg(uart2_conf.hdlr, "%s", cmd_p);
+		atel_uart_dbg(uart2_conf.hdlr, cmd_len, cmd_p);
 		
-		In_Queue(cmd_p, ADC_CMD_LEN);
+		In_Queue(cmd_p);
 		atel_timer_set_attr.reload = FALSE;
 		status = qapi_Timer_Set(atel_timer_handle, &atel_timer_set_attr);
 		if(status == QAPI_OK)
@@ -294,7 +568,7 @@ void api_switch(MSG_ID_CMD cmd)
 	else
 	{
 		qt_uart_dbg(uart3_conf.hdlr,"[api_switch] In_Queue");
-		In_Queue(cmd_p, ADC_CMD_LEN);
+		In_Queue(cmd_p);
 	}
 	return;
 out:
@@ -368,7 +642,7 @@ unsigned char is_fullQueue(void)
 
 //Èë¶Ó
  
-void In_Queue(char *buf, int len)
+void In_Queue(char *buf)
 {
     
     //IOT_DEBUG("queue_q****\n");
@@ -378,7 +652,7 @@ void In_Queue(char *buf, int len)
         queue_api.BUF[queue_api.rear] = buf;
 		qt_uart_dbg(uart3_conf.hdlr,"[In_Queue]:%p", queue_api.BUF[queue_api.rear]);
 		
-		queue_api.bufLen = len;
+		//queue_api.bufLen = len;
         //qt_uart_dbg(uart_conf.hdlr, "%x", queue_q->BUF[queue_q->rear]);
         queue_api.rear = (queue_api.rear + 1)%QUEUE_BUF_SIZE ;    //Î²Ö¸ÕëÆ«ÒÆ 
     }
@@ -657,6 +931,10 @@ void gpio_init()
 #ifdef ATEL_MDM_BLE_UART
 #define RESP_TO_PC_BUFF_LEN 1024	
 static char respBuff[RESP_TO_PC_BUFF_LEN]={0};
+static USHORT inline adc_raw_2_mVolt(USHORT raw, float rate)
+{
+	return (USHORT)(raw*3600 * rate / 4096.0);
+}
 
 int ble_parse(char *buf)
 {
@@ -669,22 +947,15 @@ int ble_parse(char *buf)
 	{
 		case 'a':
 		{
-			g_adc.mAdc = buf[3]*10+buf[4];
-			g_adc.bAdc = buf[5]*10+buf[6];
-			g_adc.eAdc = buf[7]*10+buf[8];
-
+			g_adc.mAdc = buf[4]<<8|buf[3];
+			g_adc.bAdc = buf[6]<<8|buf[5];
+			g_adc.eAdc = buf[8]<<8|buf[7];
 			rxcb.msg_id = MSG_ADC;
-#if 0			
-			rxcb.ble_st.adc.mAdc = buf[3]*10+buf[4];
-			rxcb.ble_st.adc.bAdc = buf[5]*10+buf[6];
-			rxcb.ble_st.adc.eAdc = buf[7]*10+buf[8];
-#else
-			rxcb.ble_st.adc.mAdc = buf[3]<<8|buf[4];
-			rxcb.ble_st.adc.bAdc = buf[5]<<8|buf[6];
-			rxcb.ble_st.adc.eAdc = buf[7]<<8|buf[8];
-#endif			
+			rxcb.ble_st.adc.mAdc = adc_raw_2_mVolt(g_adc.mAdc, 1.432);
+			rxcb.ble_st.adc.bAdc = adc_raw_2_mVolt(g_adc.bAdc, 11.0);
+			rxcb.ble_st.adc.eAdc = adc_raw_2_mVolt(g_adc.eAdc, 1.0);
 			rxcb.err=API_RET_OK_E;
-			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] mAdc:%d, bAdc:%d, eAdc:%d", g_adc.mAdc, g_adc.bAdc, g_adc.eAdc);
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] raw mAdc:%d, bAdc:%d, eAdc:%d", g_adc.mAdc, g_adc.bAdc, g_adc.eAdc);
 
 			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
 			if (TX_SUCCESS != status)
@@ -693,6 +964,285 @@ int ble_parse(char *buf)
 			}
 		}
 		break;
+		case 'b':
+		{
+			rxcb.msg_id = MSG_WD_DF_TIMER;
+			g_wd_default_timer.wdDefTimer = buf[4]<<8|buf[3];
+			rxcb.ble_st.wdDefTimer.wdDefTimer = buf[4]<<8|buf[3];
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] wdDefTimer:%d", rxcb.ble_st.wdDefTimer.wdDefTimer);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;
+		case 'c':
+		{
+			rxcb.msg_id = MSG_GET_PIN_CFG;
+			g_pin_cfg.idx = buf[3];
+			g_pin_cfg.cfg = buf[4];
+			rxcb.ble_st.pinCfg.idx = buf[3];
+			rxcb.ble_st.pinCfg.cfg = buf[4];
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] idx:%d, cfg:%d", g_pin_cfg.idx, g_pin_cfg.cfg);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;		
+		case 'e':
+		{
+			rxcb.msg_id 		= MSG_GPIO_CFG;
+			g_gpio_cfg.pin      = rxcb.ble_st.gpioCfg.pin 	 = buf[3];
+			g_gpio_cfg.status 	= rxcb.ble_st.gpioCfg.status = buf[4];
+			g_gpio_cfg.timer 	= rxcb.ble_st.gpioCfg.timer	 = buf[6]<<8|buf[5];
+
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] gpiocfg, pin:%d, cfg:%d, timer:%d", 
+											rxcb.ble_st.gpioCfg.pin,
+											rxcb.ble_st.gpioCfg.status,
+											rxcb.ble_st.gpioCfg.timer
+						);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;	
+		case 'f':
+		{
+			if(buf[3] == 'R')
+			{	
+				rxcb.msg_id 		= MSG_RD_E2ROM;
+				g_e2rom_rw.rw  = E2ROM_RD;
+				g_e2rom_rw.pos = buf[4];
+				g_e2rom_rw.val = buf[8]<<24|buf[7]<<24|buf[6]<<24|buf[5];
+			}
+			else if(buf[3] == 'W')
+			{
+				rxcb.msg_id 		= MSG_WR_E2ROM;
+				g_e2rom_rw.rw 		= E2ROM_WR;
+				g_e2rom_rw.pos 		= buf[4];
+				g_e2rom_rw.val 		= buf[8]<<24|buf[7]<<24|buf[6]<<24|buf[5];				
+			}
+			else
+			{
+				rxcb.msg_id 		= E2ROM_UNKNOWN;
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] rcv cmd:f, buf[3]", buf[3]);
+			}
+			rxcb.ble_st.e2romRW.rw 	= g_e2rom_rw.rw;
+			rxcb.ble_st.e2romRW.pos = g_e2rom_rw.pos;	
+			rxcb.ble_st.e2romRW.val = g_e2rom_rw.val;	
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] e2romRW, rw:%d, pos:%d, val:%d", 
+											rxcb.ble_st.e2romRW.rw,
+											rxcb.ble_st.e2romRW.pos,
+											rxcb.ble_st.e2romRW.val
+						);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}			
+		}
+		break;
+		case 'g':
+		{
+			if(buf[3])
+			{
+				rxcb.msg_id = MSG_SET_GPIO;
+			}
+			else
+			{
+				rxcb.msg_id = MSG_RD_GPIO;
+
+			}
+			
+			rxcb.ble_st.gpioRdSet.gpio  = g_gpioRdSet.gpio  = buf[3];
+			rxcb.ble_st.gpioRdSet.rdSet = g_gpioRdSet.rdSet = buf[4];
+			rxcb.ble_st.gpioRdSet.state = g_gpioRdSet.state = buf[5];
+			
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] gpioRdSet gpio:%d, rdSet:%d, state:%d", buf[3],buf[4],buf[5]);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;	
+		case 'h':
+		{
+			rxcb.msg_id = MSG_HARD_REST;
+			rxcb.ble_st.hardRest.time = g_hard_rest.time = buf[4];
+			rxcb.err=API_RET_OK_E;
+			 
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] hard_rest:%d", buf[4]);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;	
+		case 'i':
+		{
+			rxcb.msg_id = MSG_GET_INT_STATUS;
+			g_int_status.intStatus = buf[3];
+			rxcb.ble_st.intStatus.intStatus = buf[3];
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] intStatus:%d", g_int_status.intStatus);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;
+		case 'j':
+		case 'J':
+		{
+			rxcb.msg_id = MSG_IGNITION_STATUS;
+			rxcb.ble_st.igStatus.status = buf[3];
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] ignitionStatus:%d", rxcb.ble_st.igStatus.status);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}			
+		}
+		break;
+		case 'k':
+		{
+			rxcb.msg_id = MSG_GET_WD_STATUS;
+			g_wd_status.wdPin = buf[3];
+			g_wd_status.wdExpire = buf[5]<<8|buf[4];
+			rxcb.ble_st.wdStatus.wdPin= buf[3];
+			rxcb.ble_st.wdStatus.wdExpire= buf[5]<<8|buf[4];
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] wdStatus:%d, wdExpire:%d", g_wd_status.wdPin, g_wd_status.wdExpire);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;	
+		case 'l':
+		{
+			rxcb.msg_id = MSG_SET_ADC_LVL;
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] getAdcLevel response");
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;		
+		case 'n':
+		{
+			rxcb.msg_id = MSG_SLEEP_TIMER;
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] sleepTimer response");
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;	
+		case 'p':
+		{
+			rxcb.msg_id = MSG_PWR_CTRL;
+			rxcb.err=API_RET_OK_E;
+			if(buf[1])
+			{	
+				memcpy(g_pwr_ctrl.resp, &buf[3], buf[1]);
+				memcpy(rxcb.ble_st.pwrCtrl.resp, &buf[3], buf[1]);
+			}
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] pwr ctrl response");
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;		
+		case 'q':
+		{
+			rxcb.msg_id = MSG_QUERY_GPIO;
+			rxcb.ble_st.gpioSatus.mode = g_gpio_status.mode = buf[3];
+			if(buf[3]==1)
+			{
+				rxcb.ble_st.gpioSatus.bitMask = g_gpio_status.bitMask= buf[4];
+				qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] Q cmd mode :%d,  bitMask:%d", 
+											buf[3],
+											buf[4]
+											);	
+			}else if(buf[3]==2)
+			{
+				rxcb.ble_st.gpioSatus.gpioIdx   = g_gpio_status.gpioIdx   = buf[4];
+				rxcb.ble_st.gpioSatus.gpioCfg   = g_gpio_status.gpioCfg   = buf[5];
+				rxcb.ble_st.gpioSatus.gpioState = g_gpio_status.gpioState = buf[6];
+				qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] Q cmd mode :%d,  idx:%d, cfg:%d, state:%d", 
+												buf[3],
+												buf[4],
+												buf[5],
+												buf[6]
+												);				
+			}
+			else
+			{
+			}
+			rxcb.err=API_RET_OK_E;
+			 
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}	
+		break;
+		case 'r':
+		{
+			rxcb.msg_id = MSG_GET_RTC_STATUS;
+			g_rtc_status.time= buf[6]<<24|buf[5]<<16|buf[4]<<8|buf[3];
+			rxcb.ble_st.rtcStatus.time = buf[3];
+			
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] rtcStatus:%d", g_rtc_status.time);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;		
+		case 't':
+		{
+			int id;
+			
+			rxcb.msg_id = MSG_GET_DEV_ID;
+			memcpy(g_dev_id.id, &buf[3], 3);
+			memcpy(rxcb.ble_st.devId.id, &buf[3], 3);
+			id=buf[5]<<16|buf[4]<<8|buf[3];
+			
+			rxcb.err=API_RET_OK_E;
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] dev id:%d", id);
+			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
+			if (TX_SUCCESS != status)
+			{
+				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+			}
+		}
+		break;	
 		case 'v':
 		{
 			rxcb.msg_id = MSG_VER;
@@ -712,16 +1262,18 @@ int ble_parse(char *buf)
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
 			}
 		}
-		break;	
-		case 'c':
+		break;		
+	
+		case 'y':
 		{
-			rxcb.msg_id = MSG_GET_PIN_CFG;
-			g_pin_cfg.idx = buf[3];
-			g_pin_cfg.cfg = buf[4];
-			rxcb.ble_st.pinCfg.idx = buf[3];
-			rxcb.ble_st.pinCfg.cfg = buf[4];
+			rxcb.msg_id = MSG_RST_CNT;
+			g_rst_cnt.pwrUpCnt   = buf[4]<<8|buf[3];
+			g_rst_cnt.wdHdRstCnt = buf[6]<<8|buf[5];
+			rxcb.ble_st.rcs.pwrUpCnt	= g_rst_cnt.pwrUpCnt;
+			rxcb.ble_st.rcs.wdHdRstCnt	= g_rst_cnt.wdHdRstCnt;
+		
 			rxcb.err=API_RET_OK_E;
-			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] idx:%d, cfg:%d", g_pin_cfg.idx, g_pin_cfg.cfg);
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] pwrUpCnt:%d, wdHdRstCnt:%d", g_rst_cnt.pwrUpCnt, g_rst_cnt.wdHdRstCnt);
 			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
 			if (TX_SUCCESS != status)
 			{
@@ -729,13 +1281,17 @@ int ble_parse(char *buf)
 			}
 		}
 		break;		
-		case 'i':
+		case 'z':
 		{
-			rxcb.msg_id = MSG_GET_INT_STATUS;
-			g_int_status.intStatus = buf[3];
-			rxcb.ble_st.intStatus.intStatus = buf[3];
+			int WdTimer;
+			
+			rxcb.msg_id = MSG_NEW_SLP_TIME_FMT;
+			memcpy(g_new_time_fmt.WdTimer,  &buf[4], 3);
+			memcpy(rxcb.ble_st.ntf.WdTimer, &buf[4], 3);
+			WdTimer=buf[6]<<16|buf[5]<<8|buf[4];
+			
 			rxcb.err=API_RET_OK_E;
-			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] intStatus:%d", g_int_status.intStatus);
+			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] WdTimer:%d", WdTimer);
 			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
 			if (TX_SUCCESS != status)
 			{
@@ -743,55 +1299,8 @@ int ble_parse(char *buf)
 			}
 		}
 		break;	
-		case 'k':
-		{
-			rxcb.msg_id = MSG_GET_INT_STATUS;
-			g_wd_status.wdPin = buf[3];
-			g_wd_status.wdExpire = buf[4]<<8|buf[5];
-			rxcb.ble_st.wdStatus.wdPin= buf[3];
-			rxcb.ble_st.wdStatus.wdExpire= buf[4]<<8|buf[5];
-			rxcb.err=API_RET_OK_E;
-			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] wdStatus:%d, wdExpire:%d", g_wd_status.wdPin, g_wd_status.wdExpire);
-			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
-			if (TX_SUCCESS != status)
-			{
-				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
-			}
-		}
-		break;	
-		case 'r':
-		{
-			rxcb.msg_id = MSG_GET_RTC_STATUS;
-			g_rtc_status.time= buf[3]<<24|buf[4]<<16|buf[5]<<8|buf[6];
-			rxcb.ble_st.rtcStatus.time = buf[3];
-			
-			rxcb.err=API_RET_OK_E;
-			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] rtcStatus:%d", g_rtc_status.time);
-			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
-			if (TX_SUCCESS != status)
-			{
-				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
-			}
-		}
-		break;		
-		case 't':
-		{
-			int id;
-			
-			rxcb.msg_id = MSG_GET_DEV_ID;
-			memcpy(g_dev_id.id, &buf[3], 3);
-			memcpy(rxcb.ble_st.devId.id, &buf[3], 3);
-			id=buf[3]<<16|buf[4]<<8|buf[5];
-			
-			rxcb.err=API_RET_OK_E;
-			qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] dev id:%d", id);
-			status = tx_queue_send(tx_queue_handle, &rxcb, TX_NO_WAIT);
-			if (TX_SUCCESS != status)
-			{
-				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
-			}
-		}
-		break;		
+
+	
 		case '0':
 		{
 			rxcb.msg_id = MSG_TST;
@@ -854,7 +1363,6 @@ static void ble_rx_cb(uint32_t num_bytes, void *cb_data)
 	else if(fc==0)
 	{
 		ble_parse(uart_conf->rx_buff);
-		//out_Queue();
 	}
 	else
 	{
@@ -869,7 +1377,7 @@ static void ble_rx_cb(uint32_t num_bytes, void *cb_data)
 	}
 #endif
 	snprintf(respBuff, (num_bytes+5), "+BLE:%s", uart_conf->rx_buff);
-	qt_uart_dbg(uart3_conf.hdlr,"[ble_rx_cb] resptoPc:%s", respBuff);
+	qt_uart_dbg(uart3_conf.hdlr,"[ble_rx_cb] resptoPc:%s\n", respBuff);
 	
 #if 0	
 	if(p_atcmd_name)
@@ -1061,12 +1569,153 @@ void put_cmd_to_queue(char *buf, int len)
 
 		memcpy(tmp_buff, buf+2, strlen(buf)-2);
 		qt_uart_dbg(uart3_conf.hdlr, "enQueue:%s", tmp_buff);
-		In_Queue(tmp_buff, len);
+		In_Queue(tmp_buff);
 	}
 	return;
 }
 #endif
 #endif
+int pc_switch(UCHAR cmd)
+{	
+	switch(cmd)
+	{
+		case 'A':
+		{
+			getAdc();
+		}
+		break;
+		case 'B':
+		{
+			USHORT time = 0x1234;
+			wdDefaultTimer(time);
+		}
+		break;						
+		case 'C':
+		{
+			UCHAR pinIdx=7;
+			queryPincfg(pinIdx);
+		}
+		break;
+		case 'E':
+		{
+			UCHAR	pin = 7;
+			CHAR io_status = 1; //1 input; 0 output
+			USHORT timer= 1;
+			gpioCfg(pin, io_status, timer);
+		}
+		break;	
+		case 'F':
+		{
+			readE2rom();
+		}
+		break;		
+		case 'f':
+		{
+			writeE2rom();
+		}
+		break;	
+		case 'G':
+		{
+			/* gpio 7/8 test */
+			readGpio(7);
+		}
+		break;		
+		case 'g':
+		{
+			/* gpio 7/8 test */
+			setGpio(7,1);
+		}
+		break;	
+		case 'H':
+		{
+			UCHAR delay=0x0A;
+			hardRest(delay);
+		}
+		break;	
+		case 'I':
+		{
+			queryIntStatus();
+		}
+		break;	
+		case 'K':
+		{
+			/* MCU use 3 byte, that means 3 byte valid */
+			uint32 timer = 0x123456;
+			kickTheWatchDog(timer);
+		}
+		break;
+		case 'L':
+		{
+			UCHAR channel=1;  //12v
+			UCHAR upLow=1;		//1 upper threshold trigger;0 upper threshold trigger;
+			UCHAR threshold=100; //origal adc val
+			setAdcLevel(channel, upLow, threshold);
+		}
+		break;	
+		case 'N':
+		{
+			/* 3byte valid */
+			uint32 time=0x123456;
+			sleepTimer(time);
+		}
+		break;	
+		case 'P':
+		{
+			powerControl();
+		}
+		break;							
+		case 'Q':
+		{
+#if 1			
+			/* mode:1/2 */
+			UCHAR mode=2;
+			UCHAR idx=0;
+#else
+			UCHAR mode=2;
+			UCHAR idx=7;
+
+#endif
+			queryGpio(mode, idx);
+		}
+		break;							
+		case 'R':
+		{
+			queryRtcSleepTime();
+		}
+		break;
+		case 'T':
+		{
+			queryDevId();
+		}
+		break;
+		case 'v':
+		{
+			getVer();
+		}
+		break;	
+		case 'Y':
+		{
+			resetCounter();
+		}
+		break;						
+		case 'Z':
+		{
+			UCHAR mode = 3;
+			int   val  = 0x12345678;
+			newSleepTimeFormat(mode, val);
+		}
+		break;	
+		case '0':
+		{
+			testCmd();
+		}
+		break;						
+		default:
+			return -1;
+		break;
+	}
+	return 0;
+}
 #define PC_TEST
 void pc_atfwd_cmd_handler_cb(boolean is_reg, char *atcmd_name,
                                  uint8* at_fwd_params, uint8 mask,
@@ -1122,54 +1771,8 @@ void pc_atfwd_cmd_handler_cb(boolean is_reg, char *atcmd_name,
 				if(memcmp(tmp_params,"##",2) == 0)
 				{
 #ifdef PC_TEST	
-					switch(tmp_p[0])
-					{
-						case 'A':
-						{
-							getAdc();
-						}
-						break;
-						case 'v':
-						{
-							getVer();
-						}
-						break;
-						case 'C':
-						{
-							queryPincfg();
-						}
-						break;
-						case 'I':
-						{
-							queryIntStatus();
-						}
-						break;
-						case 'K':
-						{
-							kickTheWatchDog();
-						}
-						break;	
-						case 'R':
-						{
-							queryRtcSleepTime();
-						}
-						break;
-						case 'T':
-						{
-							queryDevId();
-						}
-						break;						
-						
-						case '0':
-						{
-							testCmd();
-						}
-						break;						
-						default:
-						break;
-					}
+					pc_switch(tmp_p[0]);					
 					qapi_atfwd_send_resp(atcmd_name, "", QUEC_AT_RESULT_OK_V01);
-					
 					return;
 #endif				
   
@@ -1422,7 +2025,7 @@ int msg_parse(TASK_MSG rxdata)
 		case MSG_GET_DEV_ID:
 		{
 			int id;
-			id=rxdata.ble_st.devId.id[0]<<16|rxdata.ble_st.devId.id[1]<<8|rxdata.ble_st.devId.id[2];
+			id=rxdata.ble_st.devId.id[2]<<16|rxdata.ble_st.devId.id[1]<<8|rxdata.ble_st.devId.id[0];
 			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv dev Id:%d, err:%d", 
 																			  id,
 																			  rxdata.err
@@ -1430,6 +2033,177 @@ int msg_parse(TASK_MSG rxdata)
 					
 			qapi_Timer_Stop(atel_timer_handle);
 			out_Queue();
+		}
+		break;		
+		case MSG_NEW_SLP_TIME_FMT:
+		{
+			int nstf;
+			nstf=rxdata.ble_st.ntf.WdTimer[2]<<16|rxdata.ble_st.ntf.WdTimer[1]<<8|rxdata.ble_st.ntf.WdTimer[0];
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv nstf:%d, err:%d", 
+																			  nstf,
+																			  rxdata.err
+																			 );
+					
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+		}
+		break;		
+		case MSG_RST_CNT:
+		{
+			int pwrUpCnt;
+			int wdHdRstCnt;
+			pwrUpCnt=rxdata.ble_st.rcs.pwrUpCnt;
+			wdHdRstCnt=rxdata.ble_st.rcs.wdHdRstCnt;
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv pwrUpCnt:%d, wdHdRstCnt:%d,err:%d", 
+																			  pwrUpCnt,
+																			  wdHdRstCnt,
+																			  rxdata.err
+																			 );
+					
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+		}
+		break;		
+		case MSG_WD_DF_TIMER:
+		{
+			g_wd_default_timer.wdDefTimer = rxdata.ble_st.wdDefTimer.wdDefTimer;
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv wdDefTimer:%d, err:%d", 
+																	g_wd_default_timer.wdDefTimer,
+																			  rxdata.err
+																			 );
+					
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+		}
+		break;	
+		case MSG_QUERY_GPIO:
+		{
+			UCHAR mode;
+			UCHAR mask;
+			UCHAR idx;
+			UCHAR cfg;
+			UCHAR state;
+			mode = rxdata.ble_st.gpioSatus.mode;
+			mask = rxdata.ble_st.gpioSatus.bitMask;
+			idx  = rxdata.ble_st.gpioSatus.gpioIdx;
+			cfg  = rxdata.ble_st.gpioSatus.gpioCfg;
+			state= rxdata.ble_st.gpioSatus.gpioState;
+		if(mode==1)
+		{
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv bitMask:0x%x\n", mask);
+		}else if(mode==2)
+		{
+	
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv mode:%d, idx:%d, cfg:%d, state:%d,err:%d", 
+																	mode,
+																	idx,
+																	cfg,
+																	state,
+																			  rxdata.err
+																			 );
+					
+		}
+
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+		}
+		break;	
+
+		case MSG_GPIO_CFG:
+		{			
+			UCHAR pin 		= rxdata.ble_st.gpioCfg.pin;
+			UCHAR cfg 		= rxdata.ble_st.gpioCfg.status;
+			USHORT timer 	= rxdata.ble_st.gpioCfg.timer;
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv gpioCfg pin:%d, cfg:%d, timer:%d, err:%d", 
+																			  pin,
+																			  cfg,
+																			  timer,
+																			  rxdata.err
+																			 );		
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+		}
+		break;
+
+		case MSG_RD_E2ROM:
+		{
+			UCHAR rw 		= rxdata.ble_st.e2romRW.rw;
+			UCHAR pos 		= rxdata.ble_st.e2romRW.pos;
+			uint32 val 	= rxdata.ble_st.e2romRW.val;
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv e2romRW rw:%d, pos:%d, val:%d, err:%d", 
+																			  rw,
+																			  pos,
+																			  val,
+																			  rxdata.err
+																			 );		
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+
+		}
+		break;
+		case MSG_WR_E2ROM:
+		{
+			UCHAR rw 		= rxdata.ble_st.e2romRW.rw;
+			UCHAR pos 		= rxdata.ble_st.e2romRW.pos;
+			uint32 val 	= rxdata.ble_st.e2romRW.val;
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv e2romRW rw:%d, pos:%d, val:%d, err:%d", 
+																			  rw,
+																			  pos,
+																			  val,
+																			  rxdata.err
+																			 );		
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+
+		}
+		break;	
+		case MSG_RD_GPIO:
+		case MSG_SET_GPIO:
+		{
+			UCHAR gpio = rxdata.ble_st.gpioRdSet.gpio;
+			UCHAR rdSet = rxdata.ble_st.gpioRdSet.rdSet;
+			UCHAR state = rxdata.ble_st.gpioRdSet.state;
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv read/set GPIO, gpio:%d, rdSet:%d, state:%d", gpio,rdSet,state);
+					
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();			
+		}
+		break;		
+		case MSG_HARD_REST:
+		{
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv hard rest, time:%d, err:%d", rxdata.ble_st.hardRest.time,rxdata.err);
+					
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+		}
+		break;		
+		case MSG_SET_ADC_LVL:
+		{
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv setAdcLevel response");
+					
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+		}
+		break;	
+		case MSG_SLEEP_TIMER:
+		{
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv sleepTimer response");
+					
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+		}
+		break;		
+		case MSG_PWR_CTRL:
+		{
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv powerControl response");
+					
+			qapi_Timer_Stop(atel_timer_handle);
+			out_Queue();
+		}
+		break;	
+		case MSG_IGNITION_STATUS:
+		{
+			qt_uart_dbg(uart3_conf.hdlr, "[msg_parse] msg_rcv ignition Status:%d", rxdata.ble_st.igStatus.status);
 		}
 		break;			
 		case MSG_TST:
@@ -1540,6 +2314,8 @@ int quectel_task_entry(void)
     	//qt_uart_dbg(uart1_conf.hdlr, "tx_queue_create failed with status %d", retval);
 		qt_uart_dbg(uart3_conf.hdlr,"tx_queue_create failed with status: 0x%x", ret);
 	}
+	qt_uart_dbg(uart3_conf.hdlr,"task size: %d", sizeof(TASK_MSG));
+	
 	/* end*/
 	/* prompt task running */
 	/* begin: GPIO init */
@@ -1603,6 +2379,12 @@ int quectel_task_entry(void)
 				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'C' to BLE");
 				qt_uart_dbg(uart2_conf.hdlr, "%s", pin_cmd);
 			}
+			else if(cmd == 'E')
+			{
+				send_cmd=MSG_GPIO_CFG;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'E' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", gpioCfgcmd);
+			}			
 			else if(cmd == 'K')
 			{
 				send_cmd=MSG_GET_WD_STATUS;

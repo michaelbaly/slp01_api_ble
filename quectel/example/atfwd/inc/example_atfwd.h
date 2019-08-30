@@ -17,13 +17,74 @@
 #define VER_CMD_LEN 5
 #define PIN_CMD_LEN 5
 #define TST_CMD_LEN 5
+#define WD_DEF_TIMER_CMD_LEN 6
+#define RD_GPIO_CMD_LEN 7
+#define GPIO_CFG_CMD_LEN 8
+#define NEW_SLEEP_TIME_FMT_CMD_LEN 10
+
 #define FRAME_HEAD '$'
+typedef struct queryGpio_t{
+	UCHAR mode; 
+	UCHAR idx;
+}queryGpio_t;
+typedef struct newSleepTimeFormat_t{
+	UCHAR mode; 
+	int val;
+}newSleepTimeFormat_t;
+typedef struct setGpio_t{
+	UCHAR gpio; 
+	int val;
+}setGpio_t;
+typedef struct setAdcLevel_t{
+	UCHAR channel;
+	UCHAR upLow;
+	UCHAR threshold;
+}setAdcLevel_t;
+
+
+
+
+
 enum SENDING_STATUS{
 	IDLE,
 	SENDING,
 	DONE,
 	ERROR,
 };
+enum E2ROM_OPERATION
+{
+	E2ROM_RD,
+	E2ROM_WR,
+	E2ROM_UNKNOWN,
+};
+
+typedef enum MSG_ID
+{
+	MSG_ADC=1,
+	MSG_VER,
+	MSG_GET_PIN_CFG,
+	MSG_TST,
+	MSG_GET_INT_STATUS,
+	MSG_GET_WD_STATUS,
+	MSG_GET_RTC_STATUS,
+	MSG_GET_DEV_ID,
+	MSG_NEW_SLP_TIME_FMT,
+	MSG_RST_CNT,
+	MSG_WD_DF_TIMER,
+	MSG_QUERY_GPIO,
+	MSG_GPIO_CFG,
+	MSG_RD_E2ROM,
+	MSG_WR_E2ROM,
+	MSG_RD_GPIO,
+	MSG_SET_GPIO,
+	MSG_HARD_REST,
+	MSG_SET_ADC_LVL,
+	MSG_SLEEP_TIMER,
+	MSG_PWR_CTRL,
+	MSG_IGNITION_STATUS,
+	MSG_MAX,
+}MSG_ID_CMD;
+
 #define QUEUE_BUF_SIZE 30
 typedef struct 
 {
@@ -68,53 +129,119 @@ struct DEV_ID_ST
 {
 	UCHAR id[3];
 };
+struct NEW_TIME_FMT_ST
+{
+	UCHAR WdTimer[3];
+};
+
+struct RST_CNT_ST
+{
+	USHORT pwrUpCnt;
+	USHORT wdHdRstCnt;
+};
 
 struct PIN_CFG_ST
 {
 	UCHAR idx;
 	UCHAR cfg;
 };
-
-typedef enum MSG_ID
+struct WD_DEFAULT_TIMER
 {
-	MSG_ADC=1,
-	MSG_VER,
-	MSG_GET_PIN_CFG,
-	MSG_TST,
-	MSG_GET_INT_STATUS,
-	MSG_GET_WD_STATUS,
-	MSG_GET_RTC_STATUS,
-	MSG_GET_DEV_ID,
-	MSG_MAX,
-}MSG_ID_CMD;
-
-typedef struct ADC_ST ADC_ST;
-typedef struct VER_ST VER_ST;
-typedef struct PIN_CFG_ST PIN_CFG_ST;
-typedef struct INT_STATUS_ST INT_STATUS_ST;
-typedef struct WD_STATUS_ST WD_STATUS_ST;
-typedef struct RTC_STATUS_ST RTC_STATUS_ST;
-typedef struct DEV_ID_ST DEV_ID_ST;
-struct BLE_ST
-{
-	ADC_ST 			adc;
-	VER_ST 			ver;
-	PIN_CFG_ST 		pinCfg;	
-	INT_STATUS_ST 	intStatus;
-	WD_STATUS_ST 	wdStatus;
-	RTC_STATUS_ST	rtcStatus;
-	DEV_ID_ST		devId;
+	UCHAR wdDefTimer;
 };
-typedef struct BLE_ST BLE_ST;
+struct GPIO_STATUS_T
+{
+	UCHAR mode;
+	int bitMask;
+	
+	UCHAR gpioIdx;
+	UCHAR gpioCfg;
+	UCHAR gpioState;
+};
+struct GPIO_CFG_T
+{
+	UCHAR pin; 
+	UCHAR status; 
+	USHORT 	timer;
+};
+struct E2ROM_RW_T
+{
+	UCHAR  rw; 
+	UCHAR  pos; 
+	uint32 val;
+};
+struct GPIO_RD_SET_T
+{
+	UCHAR  gpio; 
+	UCHAR  rdSet; 
+	UCHAR  state;
+};
+struct HARD_REST_T
+{
+	UCHAR  time;
+};
+struct SLEEP_TIMER_T
+{
+	UCHAR  resp[3];
+};
+struct PWR_CTRL_T
+{
+	UCHAR  resp[8];
+};
+struct IGNITION_STATUS_T
+{
+	bool status;
+};
 
-/* API */
-void getAdc(void); 
-void getVer(void);
-void queryPincfg(void);
-void queryIntStatus(void);
-void kickTheWatchDog(void);
-void queryRtcSleepTime(void);
-void queryDevId(void);
+
+
+typedef struct ADC_ST 				ADC_ST;
+typedef struct VER_ST 				VER_ST;
+typedef struct PIN_CFG_ST 			PIN_CFG_ST;
+typedef struct INT_STATUS_ST 		INT_STATUS_ST;
+typedef struct WD_STATUS_ST 		WD_STATUS_ST;
+typedef struct RTC_STATUS_ST 		RTC_STATUS_ST;
+typedef struct DEV_ID_ST 			DEV_ID_ST;
+typedef struct NEW_TIME_FMT_ST 		NEW_TIME_FMT_ST;
+typedef struct RST_CNT_ST 			RST_CNT_ST;
+typedef struct WD_DEFAULT_TIMER 	WD_DEFAULT_TIMER;
+typedef struct GPIO_STATUS_T 		GPIO_STATUS_T;
+typedef struct GPIO_CFG_T 			GPIO_CFG_T;
+typedef struct E2ROM_RW_T 			E2ROM_RW_T; 
+typedef struct GPIO_RD_SET_T 		GPIO_RD_SET_T; 
+typedef struct HARD_REST_T 			HARD_REST_T;
+typedef struct SLEEP_TIMER_T 		SLEEP_TIMER_T;
+typedef struct PWR_CTRL_T 			PWR_CTRL_T;
+typedef struct IGNITION_STATUS_T 	IGNITION_STATUS_T;
+
+
+
+
+
+union BLE_ST
+{
+	IGNITION_STATUS_T   igStatus;
+	PWR_CTRL_T			pwrCtrl;
+	SLEEP_TIMER_T		sleepTimer;
+	HARD_REST_T			hardRest;
+	GPIO_RD_SET_T		gpioRdSet;
+	GPIO_CFG_T			gpioCfg;
+	ADC_ST 				adc;
+	VER_ST 				ver;
+	PIN_CFG_ST 			pinCfg;	
+	INT_STATUS_ST 		intStatus;
+	WD_STATUS_ST 		wdStatus;
+	RTC_STATUS_ST		rtcStatus;
+	DEV_ID_ST			devId;
+	NEW_TIME_FMT_ST 	ntf;
+	RST_CNT_ST 			rcs;
+	WD_DEFAULT_TIMER 	wdDefTimer;
+	GPIO_STATUS_T       gpioSatus;
+	E2ROM_RW_T			e2romRW;
+	
+};
+typedef union BLE_ST BLE_ST;
+
 #endif
 
 #if defined(__EXAMPLE_ATFWD__)
@@ -162,8 +289,8 @@ typedef enum{
 
 typedef struct TASK_COMM_S{
 	int msg_id;
-	int dat;
-	CHAR name[16];
+	//int dat;
+	//CHAR name[16];
 #ifdef ATEL_MDM_BLE_UART
 	BLE_ST ble_st;
 	API_RETURN_VAL err;
