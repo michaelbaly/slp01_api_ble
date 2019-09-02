@@ -255,6 +255,7 @@ typedef  unsigned char      boolean;
 
 /*  !!! This Pin Enumeration Only Applicable BG96-OPEN Project !!!
  */
+ #if 0
 typedef enum{
 	PIN_E_GPIO_01=0,
 	PIN_E_GPIO_02,
@@ -272,7 +273,7 @@ typedef enum{
 	PIN_E_GPIO_21,
 	PIN_E_GPIO_MAX
 }MODULE_PIN_ENUM;
-
+#endif
 typedef struct{
 	uint32_t pin_num;
 	char     *pin_name;
@@ -313,30 +314,6 @@ typedef struct TASK_COMM_S{
 #define QUEC_AT_MASK_AR_V01 8 /**<  Denotes presence of trailing argument operator */
 
 void qt_uart_dbg(qapi_UART_Handle_t uart_hdlr, const char* fmt, ...);
-
-/* define the table of AT cmd for GPIO control */
-typedef struct atcmd_gpio_s {
-	char *cmdstr;
-	char *oppcmdstr;
-	MODULE_PIN_ENUM gpio_phy_port;
-	boolean on_enable_flag;
-}ATCMD_GPIO_T;
-
-const ATCMD_GPIO_T atcmd_gpio_table[] = {
-	
-	{ "CHARGE_DET_ON", 		"CHARGE_DET_OFF",		PIN_E_GPIO_01, 		LOW },
-	{ "MDM_LDO_ENABLE", 	"MDM_LDO_DISABLE",		PIN_E_GPIO_02, 		LOW },
-	{ "LAN_POWER_ON", 		"LAN_POWER_OFF",		PIN_E_GPIO_04, 		HIGH },
-	{ "WAKEUP_IN_ON", 		"WAKEUP_IN_OFF",		PIN_E_GPIO_05, 		HIGH },
-	{ "WAKE_BLE_ON", 		"WAKE_BLE_OFF",			PIN_E_GPIO_09, 		HIGH },
-	{ "GREEN_LED_ON", 		"GREEN_LED_OFF",		PIN_E_GPIO_19, 		HIGH },
-	{ "BLUE_LED_ON", 		"BLUE_LED_OFF",			PIN_E_GPIO_20, 		HIGH },
-	{ "ACC_INT2_ON", 		"ACC_INT2_OFF",			PIN_E_GPIO_21, 		HIGH }
-	
-};
-
-#define ATCMDS_SIZE  sizeof(atcmd_gpio_table)/sizeof(ATCMD_GPIO_T)
-
 
 #endif /*__EXAMPLE_ATFWD__*/
 
