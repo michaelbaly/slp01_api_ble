@@ -851,7 +851,6 @@ int ble_parse(char *buf)
 			}
 		}
 		break;	
-		
 		case 'e':
 		{
 			rxcb.msg_id 		= MSG_GPIO_CFG;
