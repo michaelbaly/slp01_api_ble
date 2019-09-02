@@ -850,7 +850,8 @@ int ble_parse(char *buf)
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
 			}
 		}
-		break;		
+		break;	
+		
 		case 'e':
 		{
 			rxcb.msg_id 		= MSG_GPIO_CFG;
