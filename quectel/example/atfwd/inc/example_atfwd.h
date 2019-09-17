@@ -13,6 +13,17 @@
 #define __EXAMPLE_ATFWD_H__
 
 #ifdef ATEL_MDM_BLE_UART
+
+#define RER_CMD_LEN 10
+#define WER_CMD_LEN 10
+#define HDR_CMD_LEN 5
+#define PCL_CMD_LEN 5 
+#define QG_CMD_LEN  5
+#define RST_CMD_LEN 5
+#define QID_CMD_LEN 5
+#define RTC_CMD_LEN 5
+#define WD_CMD_LEN  7
+#define INT_CMD_LEN 5
 #define ADC_CMD_LEN 5
 #define VER_CMD_LEN 5
 #define PIN_CMD_LEN 5
@@ -21,6 +32,10 @@
 #define RD_GPIO_CMD_LEN 7
 #define GPIO_CFG_CMD_LEN 8
 #define NEW_SLEEP_TIME_FMT_CMD_LEN 10
+#define SET_GPIO_CMD_LEN 7
+#define SET_ADC_LVL_CMD_LEN 6
+#define SLEEP_TIMER_CMD_LEN 7
+
 
 #define FRAME_HEAD '$'
 typedef struct queryGpio_t{
@@ -147,7 +162,7 @@ struct PIN_CFG_ST
 };
 struct WD_DEFAULT_TIMER
 {
-	UCHAR wdDefTimer;
+	USHORT wdDefTimer;
 };
 struct GPIO_STATUS_T
 {

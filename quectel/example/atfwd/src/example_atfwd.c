@@ -17,7 +17,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
-#include <errno.h>
 #include <string.h>
 #include <locale.h>
 
@@ -137,23 +136,23 @@ static PWR_CTRL_T 		g_pwr_ctrl = {0};
 static char adc_cmd[ADC_CMD_LEN+1]={0x24 ,0x01 ,0x41 ,0x01 ,0x0D, 0x00};
 static char ver_cmd[VER_CMD_LEN+1]={0x24 ,0x01 ,0x56 ,0x01 ,0x0D, 0x00};
 static char pin_cmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x43 ,0x01 ,0x0D ,0x00};
-static char int_cmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x49 ,0x01 ,0x0D ,0x00};
-static char wd_cmd [PIN_CMD_LEN+1+1+1+1]={0x24 ,0x03 ,0x4B ,0x00 ,0x00 ,0x00, 0x0D, 0x00};
-static char rtc_cmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x52 ,0x01 ,0x0D ,0x00};
-static char qId_cmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x54 ,0x01 ,0x0D ,0x00};
+static char int_cmd[INT_CMD_LEN+1]={0x24 ,0x01 ,0x49 ,0x01 ,0x0D ,0x00};
+static char wd_cmd [WD_CMD_LEN +1]={0x24 ,0x03 ,0x4B ,0x00 ,0x00 ,0x00, 0x0D, 0x00};
+static char rtc_cmd[RTC_CMD_LEN+1]={0x24 ,0x01 ,0x52 ,0x01 ,0x0D ,0x00};
+static char qId_cmd[QID_CMD_LEN+1]={0x24 ,0x01 ,0x54 ,0x01 ,0x0D ,0x00};
 static char newTimeCmd[NEW_SLEEP_TIME_FMT_CMD_LEN+1]={0x24 ,0x06 ,0x5A ,0x5A ,0xFF ,0xFF,0xFF ,0xFF,0xFF ,0x0D ,0x00};
-static char rst_cnt[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x59, 0x01 ,0x0D ,0x00};
+static char rst_cnt[RST_CMD_LEN+1]={0x24 ,0x01 ,0x59, 0x01 ,0x0D ,0x00};
 static char wdDefaultTimerCmd[WD_DEF_TIMER_CMD_LEN+1]={0x24 ,0x02 ,0x42, 0x00, 0x00, 0x0D ,0x00};
-static char queryGpioCmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x51, 0x01 ,0x0D ,0x00};
+static char queryGpioCmd[QG_CMD_LEN+1]={0x24 ,0x01 ,0x51, 0x01 ,0x0D ,0x00};
 static char gpioCfgcmd[GPIO_CFG_CMD_LEN+1]={0x24 ,0x04 ,0x45, 0x00, 0x00,0x00,0x00,0x0D ,0x00};
-static char readE2romCmd[PIN_CMD_LEN+PIN_CMD_LEN+1] = {0x24 ,0x06 ,0x46, 0x52, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x0D,0x00};
-static char writeE2romCmd[PIN_CMD_LEN+PIN_CMD_LEN+1] = {0x24 ,0x06 ,0x46, 0x57, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x0D,0x00};
+static char readE2romCmd[RER_CMD_LEN+1] = {0x24 ,0x06 ,0x46, 0x52, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x0D,0x00};
+static char writeE2romCmd[WER_CMD_LEN+1] = {0x24 ,0x06 ,0x46, 0x57, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x0D,0x00};
 static char readGpioCmd[RD_GPIO_CMD_LEN+1]={0x24 ,0x03 ,0x47, 0x00, 0x00, 0x00 ,0x0D ,0x00};
-static char setGpioCmd[PIN_CMD_LEN+1]={0x24 ,0x03 ,0x47, 0x00, 0x00, 0x00 ,0x0D ,0x00};
-static char hardRestCmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x48, 0xFF, 0x0D ,0x00};
-static char setAdcLvlCmd[PIN_CMD_LEN+1]={0x24 ,0x02 ,0x4C, 0xFF, 0xFF, 0x0D ,0x00};
-static char sleepTimerCmd[PIN_CMD_LEN+1]={0x24 ,0x03 ,0x4E, 0xFF, 0xFF, 0xFF, 0x0D ,0x00};
-static char pwrCtrlCmd[PIN_CMD_LEN+1]={0x24 ,0x01 ,0x50, 0x00, 0x0D ,0x00};
+static char setGpioCmd[SET_GPIO_CMD_LEN+1]={0x24 ,0x03 ,0x47, 0x00, 0x00, 0x00 ,0x0D ,0x00};
+static char hardRestCmd[HDR_CMD_LEN+1]={0x24 ,0x01 ,0x48, 0xFF, 0x0D ,0x00};
+static char setAdcLvlCmd[SET_ADC_LVL_CMD_LEN+1]={0x24 ,0x02 ,0x4C, 0xFF, 0xFF, 0x0D ,0x00};
+static char sleepTimerCmd[SLEEP_TIMER_CMD_LEN+1]={0x24 ,0x03 ,0x4E, 0xFF, 0xFF, 0xFF, 0x0D ,0x00};
+static char pwrCtrlCmd[PCL_CMD_LEN+1]={0x24 ,0x01 ,0x50, 0x00, 0x0D ,0x00};
 static char tst_cmd[TST_CMD_LEN+1]={0x24 ,0x01 ,0x30 ,0x01 ,0x0D, 0x00};
 static CHAR ble_start[]={0x42 ,0x4c ,0x45 ,0x20 ,0x73 ,0x74 ,0x61 ,0x72 ,0x74};
 
@@ -173,7 +172,7 @@ void atel_dbg_print(const char* fmt, ...)
 	qapi_atfwd_send_urc_resp("ATEL", log_buf);
 	qapi_Timer_Sleep(50, QAPI_TIMER_UNIT_MSEC, true);
 }
-void qt_uart3_hex(const char* ch, int len);
+void qt_uart3_hex(char* ch, int len);
 void mdmSendToBle(char *buf, int len)
 {
     qapi_UART_Transmit(uart2_conf.hdlr, buf, len, NULL);
@@ -285,7 +284,6 @@ void testCmd(void)
 {
 	api_switch(MSG_TST, 0);
 }
-
 
 void api_switch(MSG_ID_CMD cmd, void *var)
 {
@@ -646,11 +644,9 @@ void qt_uart3_dbg(qapi_UART_Handle_t uart_hdlr, const char* fmt, ...)
 	va_end( ap );
 
     qapi_UART_Transmit(uart_hdlr, log_buf, strlen(log_buf), NULL);
-    //qapi_UART_Transmit(uart_hdlr, "\r", strlen("\r"), NULL);
-    //qapi_Timer_Sleep(50, QAPI_TIMER_UNIT_MSEC, true);
 }
 
-void qt_uart3_hex(const char* ch, int len)
+void qt_uart3_hex(char* ch, int len)
 {
 	int i;
 	for (i=0; i<len; ++i)
@@ -787,7 +783,6 @@ static int strncasecmp(const char * s1, const char * s2, size_t n)
   return 0;
 }
 
-
 static USHORT inline adc_raw_2_mVolt(USHORT raw, float rate)
 {
 	return (USHORT)(raw*3600 * rate / 4096.0);
@@ -798,8 +793,6 @@ int ble_parse(char *buf)
 	TASK_MSG rxcb;
 	UINT status;
 	
-	//qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] buf[2]:%x", buf[2]);
-	//qt_uart_dbg(uart3_conf.hdlr,"[ble_parse] buf[3]:%x", buf[3]);
 	switch(buf[2])
 	{
 		case 'a':
@@ -818,6 +811,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;
@@ -832,6 +826,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;
@@ -848,6 +843,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;	
@@ -868,6 +864,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;	
@@ -875,17 +872,17 @@ int ble_parse(char *buf)
 		{
 			if(buf[3] == 'R')
 			{	
-				rxcb.msg_id 		= MSG_RD_E2ROM;
+				rxcb.msg_id    = MSG_RD_E2ROM;
 				g_e2rom_rw.rw  = E2ROM_RD;
 				g_e2rom_rw.pos = buf[4];
-				g_e2rom_rw.val = buf[8]<<24|buf[7]<<24|buf[6]<<24|buf[5];
+				g_e2rom_rw.val = buf[7]<<16|buf[6]<<8|buf[5];
 			}
 			else if(buf[3] == 'W')
 			{
 				rxcb.msg_id 		= MSG_WR_E2ROM;
 				g_e2rom_rw.rw 		= E2ROM_WR;
 				g_e2rom_rw.pos 		= buf[4];
-				g_e2rom_rw.val 		= buf[8]<<24|buf[7]<<24|buf[6]<<24|buf[5];				
+				g_e2rom_rw.val 		= buf[7]<<16|buf[6]<<8|buf[5];				
 			}
 			else
 			{
@@ -905,6 +902,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}			
 		}
 		break;
@@ -930,6 +928,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;	
@@ -944,6 +943,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;	
@@ -958,6 +958,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;
@@ -974,6 +975,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}			
 		}
 		break;
@@ -990,6 +992,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;	
@@ -1002,6 +1005,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;		
@@ -1014,6 +1018,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;	
@@ -1031,6 +1036,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;		
@@ -1066,6 +1072,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}	
 		break;
@@ -1081,6 +1088,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;		
@@ -1099,6 +1107,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;	
@@ -1119,6 +1128,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;		
@@ -1137,6 +1147,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;		
@@ -1155,6 +1166,7 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;	
@@ -1169,12 +1181,16 @@ int ble_parse(char *buf)
 			if (TX_SUCCESS != status)
 			{
 				qt_uart_dbg(uart3_conf.hdlr, "[ble_parse] tx_queue_send failed err:%d", status);
+				goto out;
 			}
 		}
 		break;		
 		default:
 		break;
 	}
+	return 0;
+out:
+	return -1;
 }
 
 static void ble_rx_cb(uint32_t num_bytes, void *cb_data)
@@ -1233,17 +1249,13 @@ out:
 static void uart_tx_cb_at(uint32_t num_bytes, void *cb_data)
 {
 	QT_UART_CONF_PARA *uart_conf = (QT_UART_CONF_PARA*)cb_data;
-	
 	qt_uart_dbg(uart3_conf.hdlr, "[uart_tx_cb_at] send nbytes:%d", num_bytes);
-	//qt_uart_dbg(uart3_conf.hdlr, "[uart_tx_cb_at] send data:%s", uart_conf->tx_buff);
-	
 	return;
 }
 
 
 void uart_init_at(QT_UART_CONF_PARA *uart_conf)
 {
-	//qapi_Status_t status;
 	qapi_UART_Open_Config_t uart_cfg;
 	QAPI_UART_Ioctl_Param IoCtrl;
 	IoCtrl.Flow_Control_Type = QAPI_FCTL_OFF_E;
@@ -1268,9 +1280,7 @@ void uart_init_at(QT_UART_CONF_PARA *uart_conf)
 void uart_deinit_at(QT_UART_CONF_PARA *uart_conf)
 {
 	qapi_UART_Close(uart_conf->hdlr);
-
 	qapi_UART_Power_Off(uart_conf->hdlr);
-
 	return; 
 }
 
@@ -1283,9 +1293,7 @@ void uart_deinit_at(QT_UART_CONF_PARA *uart_conf)
 */
 void uart_recv_at(QT_UART_CONF_PARA *uart_conf)
 {
-	//qapi_Status_t status;
 	qapi_UART_Receive(uart_conf->hdlr, uart_conf->rx_buff, uart_conf->rx_len, (void*)uart_conf);
-	//IOT_DEBUG("QT# qapi_UART_Receive [%d] status %d", (qapi_UART_Port_Id_e)uart_conf->port_id, status);
 }
 
 void char2hex(char *buf, char *p)
@@ -1349,7 +1357,7 @@ int pc_switch(UCHAR cmd)
 		break;
 		case 'B':
 		{
-			USHORT time = 0x1234;
+			USHORT time = 0x0000;
 			wdDefaultTimer(time);
 		}
 		break;						
@@ -1505,11 +1513,8 @@ void pc_atfwd_cmd_handler_cb(boolean is_reg, char *atcmd_name,
 #ifdef ATEL_MDM_BLE_UART
 				char tmp_p[128] = {'\0'};
 #endif
-				qt_uart3_hex(at_fwd_params, strlen(at_fwd_params));
-				//atel_dbg_print("content of at_fwd_params:%s", at_fwd_params);
-				
-                //ret = qapi_atfwd_send_resp(atcmd_name, "", QUEC_AT_RESULT_OK_V01);//send atcmd  Reponse and then atcmd to uart2
-                qt_termintocomma((char*)at_fwd_params,tmp_params,sizeof(tmp_params));
+				qt_uart3_hex((char *)at_fwd_params, strlen((char *)at_fwd_params));
+				qt_termintocomma((char*)at_fwd_params,tmp_params,sizeof(tmp_params));
 				qt_uart_dbg(uart3_conf.hdlr, "strFromPc: %s", tmp_params);
 				char2hex(tmp_params, tmp_p);
 				qt_uart_dbg(uart3_conf.hdlr, "cmd: %c", tmp_p[0]);
@@ -1527,7 +1532,7 @@ void pc_atfwd_cmd_handler_cb(boolean is_reg, char *atcmd_name,
 					//qt_uart_dbg(uart3_conf.hdlr,"==== at_fwd_params:%s ====", at_fwd_params);
 
 					qt_uart3_hex(tmp_p+2, strlen(tmp_p)-2);
-#if 0					
+#if 1					
 					qt_uart_dbg(uart2_conf.hdlr, "%s", tmp_params+2);
 #else
 					put_cmd_to_queue(tmp_p, strlen(tmp_p)-2);
@@ -1550,8 +1555,9 @@ void atel_timer_cb(uint32_t data)
 {
 	int ret=0;	
 	TASK_MSG rxdata;
-	timer_cnt++;
 	int status=0;
+	
+	timer_cnt++;
 	
 	qt_uart_dbg(uart3_conf.hdlr, "[atel_timer_cb] cnt:%d", timer_cnt);
 	if(timer_cnt>API_TOUT_CNT_MAX) //API_TOUT_CNT_MAX s timeout
@@ -1559,7 +1565,7 @@ void atel_timer_cb(uint32_t data)
 		// retry 
 		qt_uart_dbg(uart2_conf.hdlr, queue_api.BUF[queue_api.front]);
 		++timeout_cnt;
-		timer_cnt=0; //after 2s enter here
+		timer_cnt=0;
 		qt_uart_dbg(uart3_conf.hdlr, "[atel_timer_cb] rcv timeout, cnt:%d", timeout_cnt);
 		// if retry reach MAX_CNT, send msg to Main
 		if(timeout_cnt >= API_TOUT_RETRY_CNT_MAX)
@@ -1612,10 +1618,7 @@ void atel_timer_init(void)
 	atel_timer_set_attr.reload = FALSE;
 	atel_timer_set_attr.time = 1;
 	atel_timer_set_attr.unit = QAPI_TIMER_UNIT_SEC;
-#if 0
-	status = qapi_Timer_Set(atel_timer_handle, &atel_timer_set_attr);
-	qt_uart_dbg(uart3_conf.hdlr,"[atel_timer_init] status[%d]", status);
-#endif
+
 	return;
 }
 int uart2_init(void)
@@ -2073,7 +2076,7 @@ int quectel_task_entry(void)
 		{
 			msg_parse(rxdata);
 		}	
-		//qapi_Timer_Sleep(1, QAPI_TIMER_UNIT_SEC, true);
+		
     	if(!isemptyQueue())
 		{
 			char cmd=0;
@@ -2092,6 +2095,12 @@ int quectel_task_entry(void)
 				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'A' to BLE");
 				qt_uart_dbg(uart2_conf.hdlr, "%s", adc_cmd);
 			}
+			else if(cmd == 'B')
+			{
+				send_cmd=MSG_WD_DF_TIMER;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'B' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", wdDefaultTimerCmd);
+			}			
 			else if(cmd == 'C')
 			{
 				send_cmd=MSG_GET_PIN_CFG;
@@ -2103,6 +2112,36 @@ int quectel_task_entry(void)
 				send_cmd=MSG_GPIO_CFG;
 				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'E' to BLE");
 				qt_uart_dbg(uart2_conf.hdlr, "%s", gpioCfgcmd);
+			}	
+			else if(cmd == 'F')
+			{
+				send_cmd=MSG_RD_E2ROM;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'F' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", readE2romCmd);
+			}	
+			else if(cmd == 'G')
+			{
+				send_cmd=MSG_SET_GPIO;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'G' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", setGpioCmd);
+			}	
+			else if(cmd == 'g')
+			{
+				send_cmd=MSG_RD_GPIO;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'g' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", readGpioCmd);
+			}	
+			else if(cmd == 'H')
+			{
+				send_cmd=MSG_HARD_REST;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'H' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", hardRestCmd);
+			}			
+			else if(cmd == 'I')
+			{
+				send_cmd=MSG_GET_INT_STATUS;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'I' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", int_cmd);
 			}			
 			else if(cmd == 'K')
 			{
@@ -2110,6 +2149,30 @@ int quectel_task_entry(void)
 				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'K' to BLE");
 				qt_uart_dbg(uart2_conf.hdlr, "%s", wd_cmd);
 			}	
+			else if(cmd == 'L')
+			{
+				send_cmd=MSG_SET_ADC_LVL;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'L' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", setAdcLvlCmd);
+			}
+			else if(cmd == 'N')
+			{
+				send_cmd=MSG_SLEEP_TIMER;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'N' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", sleepTimerCmd);
+			}
+			else if(cmd == 'p')
+			{
+				send_cmd=MSG_PWR_CTRL;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'P' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", pwrCtrlCmd);
+			}
+			else if(cmd == 'Q')
+			{
+				send_cmd=MSG_QUERY_GPIO;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'Q' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", queryGpioCmd);
+			}
 			else if(cmd == 'R')
 			{
 				send_cmd=MSG_GET_RTC_STATUS;
@@ -2122,12 +2185,18 @@ int quectel_task_entry(void)
 				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'T' to BLE");
 				qt_uart_dbg(uart2_conf.hdlr, "%s", qId_cmd);
 			}	
-			else if(cmd == 'I')
+			else if(cmd == 'Y')
 			{
-				send_cmd=MSG_GET_INT_STATUS;
-				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'I' to BLE");
-				qt_uart_dbg(uart2_conf.hdlr, "%s", int_cmd);
-			}			
+				send_cmd=MSG_RST_CNT;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'Y' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", rst_cnt);
+			}
+			else if(cmd == 'Z')
+			{
+				send_cmd=MSG_NEW_SLP_TIME_FMT;
+				qt_uart_dbg(uart3_conf.hdlr, "prepare send cmd 'Z' to BLE");
+				qt_uart_dbg(uart2_conf.hdlr, "%s", newTimeCmd);
+			}
 			else if(cmd == '0')
 			{
 				send_cmd=MSG_TST;
