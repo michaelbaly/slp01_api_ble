@@ -97,6 +97,7 @@ typedef enum MSG_ID
 	MSG_SLEEP_TIMER,
 	MSG_PWR_CTRL,
 	MSG_IGNITION_STATUS,
+	MSG_VIBRATOR_STATUS,
 	MSG_MAX,
 }MSG_ID_CMD;
 
@@ -208,6 +209,10 @@ struct IGNITION_STATUS_T
 	bool status;
 };
 
+struct VIBRATOR_STATUS_T
+{
+	bool status;
+};
 
 
 typedef struct ADC_ST 				ADC_ST;
@@ -228,13 +233,12 @@ typedef struct HARD_REST_T 			HARD_REST_T;
 typedef struct SLEEP_TIMER_T 		SLEEP_TIMER_T;
 typedef struct PWR_CTRL_T 			PWR_CTRL_T;
 typedef struct IGNITION_STATUS_T 	IGNITION_STATUS_T;
-
-
-
+typedef struct VIBRATOR_STATUS_T 	VIBRATOR_STATUS_T;
 
 
 union BLE_ST
 {
+	VIBRATOR_STATUS_T   vbStatus;
 	IGNITION_STATUS_T   igStatus;
 	PWR_CTRL_T			pwrCtrl;
 	SLEEP_TIMER_T		sleepTimer;

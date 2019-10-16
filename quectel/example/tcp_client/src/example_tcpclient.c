@@ -17,7 +17,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
-#include <errno.h>
+//#include <errno.h>
 #include <string.h>
 
 #include "qapi_fs_types.h"
@@ -41,8 +41,8 @@
 #define DSS_ADDR_SIZE       16
 
 #define GET_ADDR_INFO_MIN(a, b) ((a) > (b) ? (b) : (a))
-
-#define QUEC_TCP_UART_DBG
+#if 0
+#define QUEC_TCP_UART_DBG 
 #ifdef QUEC_TCP_UART_DBG
 #define TCP_UART_DBG(...)	\
 {\
@@ -51,7 +51,9 @@
 #else
 #define TCP_UART_DBG(...)
 #endif
-
+#else
+#define TCP_UART_DBG(...)	tcp_uart_debug_print(__VA_ARGS__)
+#endif
 #define THREAD_STACK_SIZE    (1024 * 16)
 #define THREAD_PRIORITY      (180)
 #define BYTE_POOL_SIZE       (1024 * 16)
@@ -99,7 +101,7 @@ static char *uart_tx_buff = NULL;
 static QT_UART_CONF_PARA uart_conf =
 {
 	NULL,
-	QT_UART_PORT_02,
+	QT_UART_PORT_03,
 	NULL,
 	0,
 	NULL,
@@ -110,7 +112,7 @@ static QT_UART_CONF_PARA uart_conf =
 /*===========================================================================
                                FUNCTION
 ===========================================================================*/
-void tcp_uart_dbg_init()
+void atel_tcp_uart_dbg_init()
 {
   	if (TX_SUCCESS != tx_byte_allocate(byte_pool_tcp, (VOID *)&uart_rx_buff, 4*1024, TX_NO_WAIT))
   	{
@@ -144,7 +146,7 @@ void tcp_uart_debug_print(const char* fmt, ...)
     va_end(arg_list);
 		
     qapi_UART_Transmit(uart_conf.hdlr, dbg_buffer, strlen(dbg_buffer), NULL);
-    qapi_Timer_Sleep(10, QAPI_TIMER_UNIT_MSEC, true);   //50
+    qapi_Timer_Sleep(50, QAPI_TIMER_UNIT_MSEC, true);   //50
 }
 
 
@@ -516,8 +518,8 @@ static int start_tcp_session(void)
 		memset(buff, 0, sizeof(buff));
 		memset(&client_addr, 0, sizeof(client_addr));
 		client_addr.sin_family = AF_INET;
-		client_addr.sin_port = _htons(DEF_SRV_PORT);
-		client_addr.sin_addr.s_addr = inet_addr(DEF_SRV_ADDR);
+		client_addr.sin_port = _htons(DEF_SRV_TCP_PORT);
+		client_addr.sin_addr.s_addr = inet_addr(DEF_SRV_TCP_ADDR);
 
 		/* Connect to TCP server */
 		if (-1 == qapi_connect(sock_fd, (struct sockaddr *)&client_addr, sizeof(client_addr)))
@@ -526,7 +528,7 @@ static int start_tcp_session(void)
 			break;
 		}
 		
-		TCP_UART_DBG("<-- Connect to server[%s][%d] success -->\n", DEF_SRV_ADDR, DEF_SRV_PORT);
+		TCP_UART_DBG("<-- Connect to server[%s][%d] success -->\n", DEF_SRV_TCP_ADDR, DEF_SRV_TCP_PORT);
 
 		strcpy(buff, "Hello Quectel, Test TCP client Demo!");
 		
@@ -591,8 +593,8 @@ int quectel_task_entry(void)
     tx_byte_pool_create(byte_pool_tcp, "tcp application pool", free_memory_tcp, TCP_BYTE_POOL_SIZE);
 
 	/* Initial uart for debug */
-	tcp_uart_dbg_init();
-    TCP_UART_DBG("TCPClient Task Start...\n");
+	atel_tcp_uart_dbg_init();
+    TCP_UART_DBG("[main] TCPClient Task Start...\n");
 
     /* Create event signal handle and clear signals */
     txm_module_object_allocate(&tcp_signal_handle, sizeof(TX_EVENT_FLAGS_GROUP));

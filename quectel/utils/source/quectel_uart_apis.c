@@ -153,11 +153,15 @@ void qt_uart_dbg(qapi_UART_Handle_t uart_hdlr, const char* fmt, ...)
 {
 	char log_buf[256] = {0};
 
+	if(uart_hdlr  == NULL)
+	{
+		return;
+	}
 	va_list ap;
 	va_start(ap, fmt);
 	vsnprintf(log_buf, sizeof(log_buf), fmt, ap);
 	va_end( ap );
-
+	
     qapi_UART_Transmit(uart_hdlr, log_buf, strlen(log_buf), NULL);
     qapi_UART_Transmit(uart_hdlr, "\r", strlen("\r"), NULL);
     qapi_Timer_Sleep(50, QAPI_TIMER_UNIT_MSEC, true);

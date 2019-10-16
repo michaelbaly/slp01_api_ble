@@ -31,8 +31,8 @@
 ===========================================================================*/
 #define DEF_SRC_TYPE    SOCK_STREAM	//SOCK_STREAM(TCP) SOCK_DGRAM(UDP)
 #define DEF_LOC_ADDR	 "127.0.0.1"
-#define DEF_SRV_ADDR    "220.180.239.212"
-#define DEF_SRV_PORT    (8007)
+#define DEF_SRV_TCP_ADDR    "220.180.239.212"
+#define DEF_SRV_TCP_PORT    (8007)
 #define DEF_BACKLOG_NUM (5)
 
 #define RECV_BUF_SIZE   (128)
